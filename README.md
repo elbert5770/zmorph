@@ -20,6 +20,9 @@ Prototype. Evaluated on synthetic ground truth and on one real triplet of MICrON
 
 Only 2-D distance transforms, Gaussian filters and marching cubes are used: seconds on the test volumes.
 
+A fuller description (equations, parameters, baselines, evaluation protocol, failure modes) is in
+[`docs/METHOD.md`](docs/METHOD.md).
+
 ## Install and use
 
     pip install -e ".[test]"
@@ -110,7 +113,8 @@ heat-paths + majority 0.921, harmonic 0.934, classic SDF 0.944, sdf σ=1 0.943, 
 * σ smoothing rounds sharp corners and will thin features narrower than about 2σ.
 * The translation is one rigid shift per label: it does not handle a label whose parts move in different
   directions.
-* Known artefact: thin, shifting structures can bulge in the middle frames (linear SDF interpolation).
+* Possible artefact: thin, shifting structures may bulge in the middle frames under linear SDF interpolation (seen in
+  an exploratory check not included here; see `docs/METHOD.md`, section 7).
 * Not implemented: tiling with halos / bounding-box cropping for very large volumes, use of raw EM intensities
   as an edge prior.
 
