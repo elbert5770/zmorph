@@ -1,0 +1,149 @@
+{
+ "A_smoothed|nearest (lower section)": {
+  "acc": 0.8367894948625703,
+  "acc_changed": 0.4595459759383253,
+  "bdist": 3.4649397686031045,
+  "dice": 0.7610958207006298,
+  "comp_err": 15
+ },
+ "A_smoothed|nearest (upper section)": {
+  "acc": 0.8449727291923139,
+  "acc_changed": 0.4869421399418465,
+  "bdist": 3.06540056389068,
+  "dice": 0.765312917818935,
+  "comp_err": 20
+ },
+ "A_smoothed|heat-paths port": {
+  "acc": 0.9165780216015076,
+  "acc_changed": 0.7266652439512364,
+  "bdist": 1.7524548800988597,
+  "dice": 0.8812721091400487,
+  "comp_err": 525
+ },
+ "A_smoothed|heat-paths port + majority": {
+  "acc": 0.9212871661865889,
+  "acc_changed": 0.7424307093125617,
+  "bdist": 1.6532755711838263,
+  "dice": 0.8875966476559125,
+  "comp_err": 42
+ },
+ "A_smoothed|harmonic (L=10)": {
+  "acc": 0.9328926976386548,
+  "acc_changed": 0.7816309654013391,
+  "bdist": 1.4427246645655754,
+  "dice": 0.9014401783368707,
+  "comp_err": 21
+ },
+ "A_smoothed|sdf0 (classic binary SDF)": {
+  "acc": 0.9402870904896793,
+  "acc_changed": 0.8060394270013604,
+  "bdist": 1.3456628414070932,
+  "dice": 0.913876629108496,
+  "comp_err": 22
+ },
+ "A_smoothed|sdf (sigma=1)": {
+  "acc": 0.9395739459205342,
+  "acc_changed": 0.8036519326699922,
+  "bdist": 1.2991716088586989,
+  "dice": 0.9141073343763124,
+  "comp_err": 20
+ },
+ "A_smoothed|sdf (sigma=1) + translation": {
+  "acc": 0.9420480396492444,
+  "acc_changed": 0.8122149011657375,
+  "bdist": 1.269426000368042,
+  "dice": 0.9218126058579602,
+  "comp_err": 18
+ },
+ "A_smoothed|sdf (sigma=0.5) + translation": {
+  "acc": 0.9419364863088194,
+  "acc_changed": 0.8118281004081415,
+  "bdist": 1.2573548153049066,
+  "dice": 0.9216235895996193,
+  "comp_err": 19
+ },
+ "A_smoothed|sdf (sigma=1.5) + translation": {
+  "acc": 0.9422950506173282,
+  "acc_changed": 0.8130551924667218,
+  "bdist": 1.2684863677334848,
+  "dice": 0.9223091760902382,
+  "comp_err": 20
+ },
+ "A_smoothed|sdf (sigma=2.0) + translation": {
+  "acc": 0.9424384763407317,
+  "acc_changed": 0.8134820070957932,
+  "bdist": 1.268592086934833,
+  "dice": 0.9225261287208294,
+  "comp_err": 14
+ },
+ "B_raw|nearest (lower section)": {
+  "acc": 0.837188,
+  "acc_changed": 0.4601987047986807,
+  "bdist": 3.3868925695769754,
+  "dice": 0.7615137722214591,
+  "comp_err": 68
+ },
+ "B_raw|nearest (upper section)": {
+  "acc": 0.846276,
+  "acc_changed": 0.4906614107772549,
+  "bdist": 2.984500241013569,
+  "dice": 0.7667421406008827,
+  "comp_err": 50
+ },
+ "B_raw|heat-paths port": {
+  "acc": 0.915952,
+  "acc_changed": 0.7242132925733746,
+  "bdist": 1.6986855068390536,
+  "dice": 0.8807307071008302,
+  "comp_err": 510
+ },
+ "B_raw|heat-paths port + majority": {
+  "acc": 0.92142,
+  "acc_changed": 0.7425418661088988,
+  "bdist": 1.6105497492987384,
+  "dice": 0.8881257557789052,
+  "comp_err": 48
+ },
+ "B_raw|harmonic (L=10)": {
+  "acc": 0.934292,
+  "acc_changed": 0.786399045358862,
+  "bdist": 1.4063709079577733,
+  "dice": 0.9027959406937814,
+  "comp_err": 63
+ },
+ "B_raw|sdf0 (classic binary SDF)": {
+  "acc": 0.944004,
+  "acc_changed": 0.818242763096148,
+  "bdist": 1.2512792507674422,
+  "dice": 0.9170445660161025,
+  "comp_err": 60
+ },
+ "B_raw|sdf (sigma=1)": {
+  "acc": 0.943156,
+  "acc_changed": 0.8154002922918091,
+  "bdist": 1.1993761129864828,
+  "dice": 0.9180373354633965,
+  "comp_err": 55
+ },
+ "B_raw|sdf (sigma=1) + translation": {
+  "acc": 0.945588,
+  "acc_changed": 0.8238472574179102,
+  "bdist": 1.1819905606219425,
+  "dice": 0.9251121511970113,
+  "comp_err": 59
+ },
+ "B_raw|sdf (sigma=1) + translation, SMOOTHED inputs": {
+  "acc": 0.9416,
+  "acc_changed": 0.8118472037863856,
+  "bdist": 1.3056153805435273,
+  "dice": 0.9212427978309715,
+  "comp_err": 60
+ },
+ "B_raw|heat-paths port + majority, SMOOTHED inputs": {
+  "acc": 0.921556,
+  "acc_changed": 0.7438558384618479,
+  "bdist": 1.6193297312594304,
+  "dice": 0.8877342057321598,
+  "comp_err": 44
+ }
+}

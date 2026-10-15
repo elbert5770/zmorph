@@ -3,7 +3,7 @@
 Smooth interpolation of z-stacked multi-label images (for example EM segmentations at 8×8×40 nm voxels)
 onto an isotropic grid, plus cell surface meshes whose shared interfaces coincide.
 
-Prototype. In this repository it is evaluated on synthetic ground truth only (see *Results* and *Limitations*).
+Prototype. Evaluated on synthetic ground truth and on one real triplet of MICrONS sections (see *Results*, *Real-data example* and *Limitations*).
 
 ## Idea
 
@@ -46,6 +46,7 @@ interfaces without explicit identification of object boundaries*, bioRxiv 2025.0
     python run_sweeps.py                # results/sweeps.md   (shift, sigma/absent, noise level)
     python make_figures.py              # results/fig6_*.png  (Figure-6-style branching arch)
     python run_mesh_demo.py             # results/mesh.md, results/mesh_arch.png
+    python examples/micron_17414_17416.py   # real-data example, results/micron_17414_17416.*
     python -m pytest tests
 
 The phantom (`zmorph/phantom.py`) is a space-filling partition of tubes with a branching/fusing arch
@@ -70,10 +71,37 @@ Noise on the observed sections: jagged boundaries, isolated wrong pixels, one ba
   0.000 voxel (independently meshed smoothed indicators: 0.23 voxel). Raw competition meshes have poor
   triangles (5th-percentile minimum angle 7.4°); joint Taubin raises it to 34.5° and keeps the interfaces shared.
 
+## Real-data example: MICrONS sections 17414–17416
+
+Held-out test on three consecutive 40 nm sections (`data/micron_17414_17416/`, see its README for provenance and
+formats): the middle section is predicted from its two neighbours, an 80 nm gap (twice the usual 40 nm), and scored
+against the real middle section. `python examples/micron_17414_17416.py` (about 3 minutes) writes
+`results/micron_17414_17416.{md,json,png}`.
+
+| method | pixel accuracy | accuracy where the inputs differ | interface distance (px) | mean Dice |
+|---|---|---|---|---|
+| nearest section (lower / upper) | 0.837 / 0.845 | 0.46 / 0.49 | 3.5 / 3.1 | 0.761 / 0.765 |
+| heat-paths port + majority filter | 0.921 | 0.742 | 1.65 | 0.888 |
+| harmonic | 0.933 | 0.782 | 1.44 | 0.901 |
+| sdf0 (classic binary SDF) | 0.940 | 0.806 | 1.35 | 0.914 |
+| sdf (σ=1) | 0.940 | 0.804 | 1.30 | 0.914 |
+| sdf (σ=1) + translation | **0.942** | **0.812** | **1.27** | **0.922** |
+
+Smoothed inputs, smoothed truth. With **raw** inputs and raw truth (older 500×500 export of 17415) the ranking is the same:
+heat-paths + majority 0.921, harmonic 0.934, classic SDF 0.944, sdf σ=1 0.943, sdf σ=1 + translation **0.946**
+(nearest 0.837 / 0.846). `results/micron_17414_17416.png` shows the region of largest change: wrong pixels cover
+34% of that crop for nearest, 16% for the heat-paths port + majority filter and 11% for sdf + translation.
+
+* The original mode filter changes only 0.37% / 0.47% of the pixels of 17414 / 17416 (median changed blob 1–2 px), and
+  SDF smoothing agrees with it equally well for σ between 0.5 and 2: on these sections z-interpolation, not
+  denoising, drives accuracy.
+* One triplet in one tile is indicative only. The translation step adds about +0.2 points here; on the synthetic
+  data it matters mainly for strongly tilted neurites, so treat it as optional.
+
 ## Limitations
 
-* **Synthetic validation only here.** The phantom is tubes and arches with my noise model. Differences between
-  methods are a few percent Dice; real segmentations will differ.
+* **Validation is thin.** The synthetic phantom is tubes and arches with my noise model, and the real example is a
+  single triplet from one tile. Differences between methods are a few percent Dice.
 * The `heat` method is a port of the published algorithm with a closed-form (DCT) heat solve, a plain 3×3×3
   majority filter in place of its rule-based mode filter, and gradients taken everywhere as the paper describes.
   It is a baseline, not the original implementation.
