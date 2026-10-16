@@ -68,11 +68,21 @@ Noise on the observed sections: jagged boundaries, isolated wrong pixels, one ba
 
 * Plain SDF is best on the branching arch but falls behind the heat-path port on strongly tilted thin neurites;
   the translation step fixes that case.
-* Across lateral shifts of 0–24 px per section gap, SDF + translation is best throughout (`results/sweeps.md`).
+* Across lateral shifts of 0–24 px per section gap, SDF + translation is best among the two-section methods compared in
+  that sweep (`results/sweeps.md`, which does not include the higher-order methods below).
 * σ = 1–1.5 px is a plateau; the absent-label depth parameter is insensitive.
 * Meshes (`results/mesh.md`): 96% of interface vertices are shared exactly, 95th-percentile interface mismatch
   0.000 voxel (independently meshed smoothed indicators: 0.23 voxel). Raw competition meshes have poor
   triangles (5th-percentile minimum angle 7.4°); joint Taubin raises it to 34.5° and keeps the interfaces shared.
+
+### Against published SDF interpolation methods (`docs/METHOD.md` §7, `results/published_sdf.md`)
+
+Raya & Udupa / Herman et al. (linear), higher-order (cubic-spline) SDF interpolation and 4-point weights on SDFs
+(a stand-in for Kels & Dyn, whose set average is not an SDF average) were implemented as baselines
+(`run_published_comparison.py`). Summary: the proposed method is the better **two-section** method under noise, but
+it is **not uniformly better**. Higher-order interpolation from four or more sections is better on clean data and on
+thin tilted neurites (Dice 0.947 vs 0.883) and worse under noise. On the real sections the proposed field construction
+changes accuracy by less than 0.3 points compared with the textbook linear SDF; the translation step adds 0.24 points.
 
 ## Real-data example: MICrONS sections 17414–17416
 
@@ -114,7 +124,7 @@ heat-paths + majority 0.921, harmonic 0.934, classic SDF 0.944, sdf σ=1 0.943, 
 * The translation is one rigid shift per label: it does not handle a label whose parts move in different
   directions.
 * Possible artefact: thin, shifting structures may bulge in the middle frames under linear SDF interpolation (seen in
-  an exploratory check not included here; see `docs/METHOD.md`, section 7).
+  an exploratory check not included here; see `docs/METHOD.md`, section 8).
 * Not implemented: tiling with halos / bounding-box cropping for very large volumes, use of raw EM intensities
   as an edge prior.
 

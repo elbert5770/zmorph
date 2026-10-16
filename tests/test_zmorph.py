@@ -60,3 +60,21 @@ def test_large_segment_ids_survive():
     for m in ("sdf", "harmonic", "heat", "sdf0", "nearest"):
         v = reconstruct(secs, 5, m)
         assert v.dtype == np.int64 and set(np.unique(v)) <= set(np.unique(big)), m
+
+
+@pytest.mark.parametrize("method", ["sdf0_cubic", "sdf0_4pt", "sdf_cubic", "sdf_4pt"])
+def test_higher_order_sdf_methods_are_partitions(scene, method):
+    gt, secs = scene
+    v = reconstruct(secs, 5, method)
+    assert v.shape == gt.shape and v.dtype == np.int64
+    assert set(np.unique(v)) <= set(np.unique(gt))
+    if method.startswith("sdf0"):
+        assert (v[::5] == gt[::5]).all()          # interpolating, binary fields: observed sections reproduced exactly
+
+
+def test_higher_order_reduces_to_linear_with_two_sections(scene):
+    gt, secs = scene
+    two = [secs[1], secs[2]]
+    lin = reconstruct(two, 5, "sdf0")
+    for m in ("sdf0_4pt", "sdf0_cubic"):
+        assert (reconstruct(two, 5, m) == lin).all(), m

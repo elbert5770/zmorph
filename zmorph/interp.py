@@ -13,6 +13,8 @@ Methods
   harmonic  per-label harmonic (steady-state heat / random-walker) field between the sections,
             solved in closed form with a 2-D DCT -- the manuscript's field, without path tracing
   heat      port of the manuscript's isotherm-path morphing (see heat_paths.py)
+  sdf0_cubic / sdf0_4pt   higher-order SDF interpolation from several sections with textbook fields
+  sdf_cubic  / sdf_4pt    the same interpolation orders with the proposed field construction
 """
 import numpy as np
 import scipy.ndimage as ndi
@@ -163,6 +165,63 @@ def competition(sections, factor=5, kind="sdf", return_fields=False, **kw):
     return (lab, best, second, fields) if return_fields else (lab, best, second)
 
 
+# ----------------------------------------------------------------------------- higher-order (multi-section)
+def _field(mask, p):
+    """One label's field on one section, built exactly as in _pair_fields."""
+    if not mask.any():
+        return np.full(mask.shape, -p["absent"])
+    f = (sdf_subvoxel if p["subvoxel"] else sdf_binary)(mask)
+    if p["sigma"] > 0:
+        f = ndi.gaussian_filter(f, p["sigma"], mode="nearest")
+    return np.clip(f, -p["cap"], p["cap"])
+
+
+def _lagrange_weights(x, nodes):
+    w = np.ones(len(nodes))
+    for j, xj in enumerate(nodes):
+        for m, xm in enumerate(nodes):
+            if m != j:
+                w[j] *= (x - xm) / (xj - xm)
+    return w
+
+
+def competition_multi(sections, factor=5, interp="cubic", **kw):
+    """Like `competition` for kind='sdf', but each label's field is interpolated in z from several
+    sections instead of the two neighbouring ones.
+      interp='cubic'  natural cubic spline through all sections (scipy CubicSpline)
+      interp='4pt'    4-point (cubic Lagrange) interpolation from the four nearest sections; at the
+                      midpoint the weights are (-1/16, 9/16, 9/16, -1/16) of the 4-point scheme.
+                      With fewer than four sections the highest available degree is used.
+    Both pass through every observed section's field exactly."""
+    from scipy.interpolate import CubicSpline
+    p = dict(sigma=1.0, absent=4.0, cap=12.0, subvoxel=True)
+    p.update(kw)
+    S = len(sections)
+    ny, nx = sections[0].shape
+    nz = (S - 1) * factor + 1
+    lab = np.zeros((nz, ny, nx), np.int64)
+    best = np.full((nz, ny, nx), -np.inf)
+    second = np.full((nz, ny, nx), -np.inf)
+    labels = np.unique(np.concatenate([np.unique(s) for s in sections]))
+    zpos = np.arange(nz) / factor
+    for k in labels:
+        F = np.stack([_field(s == k, p) for s in sections])
+        if interp == "cubic":
+            V = CubicSpline(np.arange(S), F, axis=0, bc_type="natural")(zpos) if S > 2 else \
+                (1 - zpos)[:, None, None] * F[0] + zpos[:, None, None] * F[-1]   # two sections: linear, zpos in [0, 1]
+        else:
+            n = min(4, S)
+            V = np.empty((nz, ny, nx))
+            for z in range(nz):
+                seg = min(int(zpos[z]), S - 2)
+                i0 = int(np.clip(seg - (n // 2 - 1), 0, S - n))
+                w = _lagrange_weights(zpos[z], np.arange(i0, i0 + n))
+                V[z] = np.tensordot(w, F[i0:i0 + n], axes=1)
+        for z in range(nz):
+            _argmax_update(best, second, lab, V[z], k, z)
+    return lab, best, second
+
+
 def reconstruct(sections, factor=5, method="sdf", clean=False, min_area=12, **kw):
     sections = [np.asarray(s) for s in sections]
     if clean:
@@ -178,6 +237,12 @@ def reconstruct(sections, factor=5, method="sdf", clean=False, min_area=12, **kw
     if method == "heat":
         from .heat_paths import heat_path_morph
         return heat_path_morph(sections, factor, **kw)
+    if method in ("sdf_cubic", "sdf_4pt", "sdf0_cubic", "sdf0_4pt"):
+        classic = method.startswith("sdf0")
+        kw = dict(kw)
+        if classic:   # textbook fields: binary distance, no smoothing, absent labels at the cap
+            kw = dict(sigma=0.0, subvoxel=False, absent=kw.pop("absent", 12.0), **kw)
+        return competition_multi(sections, factor, "cubic" if method.endswith("cubic") else "4pt", **kw)[0]
     if method == "sdf0":
         kw = dict(sigma=0.0, subvoxel=False, absent=kw.get("absent", 12.0), **{k: v for k, v in kw.items() if k != "absent"})
         return competition(sections, factor, "sdf", **kw)[0]

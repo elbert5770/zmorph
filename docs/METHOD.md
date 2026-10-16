@@ -84,6 +84,7 @@ conformity is preserved by construction. Measured effect is in `results/mesh.md`
 | `sdf0` | classic shape-based interpolation: binary signed distance (no half-pixel offset, no smoothing), linear in z, argmax across labels |
 | `sdf` | the proposed method of section 2 (`align=True` adds section 3) |
 | `harmonic` | per label, the steady-state heat (harmonic) field between the two sections, with lateral no-flux boundaries, solved in closed form with a 2-D DCT (continuous in z over a gap `L`, default `factor`), then argmax. This is the same kind of field the manuscript uses, without path tracing. Note it cannot reproduce two identical sections exactly: lateral modes decay toward the mid-plane, so thin features blur |
+| `sdf0_cubic`, `sdf0_4pt`, `sdf_cubic`, `sdf_4pt` | higher-order interpolation of the per-label SDFs in z from several sections (natural cubic spline through all sections, or 4-point cubic from the four nearest), with textbook (`sdf0_*`) or proposed (`sdf_*`) fields; see section 7 |
 | `heat` | port of the published algorithm (Elbert, bioRxiv 2025.04.11.648268): per-cell 3-D heat solve with 25 layers and observation layer 7, gradient ascent from pixels unique to the upper section until the nearest pixel is in the overlap, path lengths normalised by the longest path per terminal pixel, assignment in frame `j` if `ceil(5·fraction) ≤ j` |
 
 Differences between `heat` and the published implementation: the 3-D solve is done in closed form (DCT) instead of
@@ -126,7 +127,85 @@ on raw sections with raw truth. The raw 17415 comes from an older export of 500 
 top-left crop of the 501 × 501 grid, so that test crops everything to 500 × 500. See
 `data/micron_17414_17416/README.md`.
 
-## 7. Known limitations and open questions
+## 7. Comparison with published SDF interpolation methods
+
+The manuscript motivating this work (Elbert, bioRxiv 2025.04.11.648268) dismisses signed-distance interpolation because,
+with many touching objects, it is "difficult to avoid overlaps and gaps". The multi-label argmax of section 2 removes that
+objection by construction, so the published SDF family is the right set of baselines. What each cited method does,
+as far as I could verify from abstracts and secondary descriptions (I did not have the full texts):
+
+| published method | what it does | what is implemented here |
+|---|---|---|
+| Raya & Udupa, *Shape-based interpolation of multidimensional objects*, IEEE Trans. Med. Imaging 9(1), 1990 | binary object per slice -> signed distance map (positive inside, negative outside) -> linear interpolation between slices -> interpolated object is where the value is non-negative | `sdf0`: binary SDF, linear in z, zero level. For several labels: one SDF per label and argmax (the multi-label extension is mine, not theirs). A label absent from one section is held at the distance cap (12) |
+| Herman, Zheng & Bucholtz, *Shape-based interpolation*, IEEE Comput. Graph. Appl. 12(3), 1992 | distance-map shape-based interpolation with linear interpolation between slices | same as above |
+| Grevera & Udupa, *Shape-based interpolation of multidimensional grey-level images*, IEEE Trans. Med. Imaging, 1996 | same distance-transform approach, noting linear or higher-order interpolation of the distance data, then thresholding at zero | `sdf0_cubic`: natural cubic spline in z through all sections of the binary SDFs. This is the "cubic spline" variant the manuscript refers to |
+| Kels & Dyn, *Reconstruction of 3D objects from 2D cross-sections with the 4-point subdivision scheme adapted to sets*, Comput. Graph. 35(3), 2011 | adapts the 4-point interpolatory subdivision scheme to **sets** through a new weighted average of two sets (negative weights for extrapolation), refined multi-resolution | `sdf0_4pt`: the 4-point cubic weights (at midpoints -1/16, 9/16, 9/16, -1/16) applied to binary SDFs. **This is a stand-in**: their set average is not an SDF average, so this is not their algorithm |
+| Levin, *Multidimensional reconstruction by set-valued approximations*, IMA J. Numer. Anal. 6(2), 1986 | approximation theory for set-valued functions sampled at equally spaced points, assuming a smooth boundary | not implemented (theory, no algorithm to run) |
+
+Not compared: registration or warp based interpolation (for example distance-field metamorphosis with feature
+warping), morphological contour interpolation, and the exact set-valued averages of Levin and Kels & Dyn.
+
+### Synthetic phantom (5 noise seeds, `run_published_comparison.py`, `results/published_sdf.md`)
+
+| method (Dice / interface distance in px) | arch, clean | arch, noisy | tilted neurites, clean | tilted neurites, noisy |
+|---|---|---|---|---|
+| Raya & Udupa / Herman et al.: linear, binary SDF | 0.972 / 0.26 | 0.948 / 0.51 | 0.894 / 0.64 | 0.866 / 0.77 |
+| higher-order (cubic spline), binary SDF | 0.974 / 0.23 | 0.946 / 0.58 | 0.947 / 0.34 | 0.912 / 0.54 |
+| 4-point weights on binary SDF | 0.973 / 0.23 | 0.946 / 0.59 | 0.946 / 0.35 | 0.911 / 0.55 |
+| **proposed (linear, two sections)** | 0.983 / 0.18 | 0.970 / 0.30 | 0.883 / 0.71 | 0.870 / 0.79 |
+| proposed + translation | 0.983 / 0.18 | 0.970 / 0.30 | 0.938 / 0.39 | 0.922 / 0.49 |
+| cubic spline, proposed fields | 0.984 / 0.15 | 0.968 / 0.40 | 0.921 / 0.51 | 0.902 / 0.65 |
+| 4-point, proposed fields | 0.985 / 0.14 | 0.968 / 0.39 | 0.921 / 0.52 | 0.902 / 0.66 |
+| 4-point, proposed fields, σ=2 | 0.979 / 0.20 | 0.969 / 0.31 | 0.902 / 0.65 | 0.890 / 0.74 |
+
+Higher-order methods use all sections (the phantom has 7) and need at least four.
+
+### Ablation: what differs from the textbook linear method
+
+| step (Dice / interface distance in px) | arch, clean | arch, noisy | tilted, clean | tilted, noisy |
+|---|---|---|---|---|
+| textbook: binary SDF, absent labels at the cap (12) | 0.972 / 0.26 | 0.948 / 0.51 | 0.894 / 0.64 | 0.866 / 0.77 |
+| absent-label depth 4 | 0.975 / 0.24 | 0.951 / 0.51 | 0.894 / 0.64 | 0.866 / 0.77 |
+| + half-pixel zero level | 0.979 / 0.22 | 0.955 / 0.46 | 0.888 / 0.67 | 0.863 / 0.79 |
+| + in-plane smoothing σ=1 (= proposed) | 0.983 / 0.18 | 0.970 / 0.30 | 0.883 / 0.71 | 0.870 / 0.79 |
+
+On real sections only two inputs exist for the held-out middle section, so the higher-order variants reduce to linear
+interpolation and cannot be tested there. The ladder on the real triplet (`examples/micron_17414_17416.py` data, 80 nm gap):
+
+| step | smoothed: accuracy / interface distance / Dice | raw: accuracy / interface distance / Dice |
+|---|---|---|
+| textbook (Raya & Udupa / Herman et al.) | 0.9403 / 1.346 / 0.9139 | 0.9440 / 1.251 / 0.9170 |
+| absent-label depth 4 | 0.9384 / 1.312 / 0.9121 | 0.9418 / 1.213 / 0.9157 |
+| + half-pixel zero level | 0.9390 / 1.309 / 0.9130 | 0.9426 / 1.205 / 0.9170 |
+| + smoothing σ=1 (= proposed) | 0.9396 / 1.299 / 0.9141 | 0.9432 / 1.199 / 0.9180 |
+| + translation | 0.9420 / 1.269 / 0.9218 | 0.9456 / 1.182 / 0.9251 |
+
+### What this shows
+
+* **Against the published linear SDF method the gain is real on noisy phantom data and small on real data.** The in-plane
+  smoothing is what matters under noise (arch, noisy: interface distance 0.46 -> 0.30 px). On the real sections each step
+  changes accuracy by less than 0.3 points, the absent-label depth 4 slightly *lowers* accuracy (0.9403 -> 0.9384 on
+  smoothed inputs) and the final linear variant is 0.07 points below the textbook version in accuracy, with slightly better
+  interface distance (1.346 -> 1.299 px) and equal Dice. Translation adds +0.24 points. These are single-triplet
+  differences without confidence intervals; I would not claim a gain over classic linear SDF on real data from them.
+* **The published higher-order SDF methods are better in some regimes.** They are the best clean-data methods on the tilted
+  neurites (Dice 0.947 against 0.883 for the proposed linear method, interface distance 0.34 against 0.71 px) because
+  several sections reveal each neurite's trajectory; with the proposed fields they also lower the interface distance on the
+  clean arch (0.176 -> 0.145 px). The translation step recovers part of the tilted-neurite gap using only two sections
+  (0.938 / 0.39 clean), but not all of it.
+* **Higher-order interpolation amplifies noise.** On the noisy arch the cubic and 4-point variants are worse than linear
+  (0.40 against 0.30 px with the proposed fields, 0.58 against 0.51 px with binary fields). Stronger smoothing (σ=2) removes
+  most of that penalty (0.31 px) but thins the tilted neurites (0.74 px noisy), so it trades noise robustness for thin
+  features.
+* **Net position.** The proposed method is not uniformly better than published SDF interpolation. It is the better
+  two-section method under noise; where four or more sections are available and the data are clean or the structures move
+  steadily, higher-order interpolation is better. The combination (higher-order interpolation, noise-robust fields and
+  translation) is untested here. Its parts that are new relative to the cited work are the multi-label competition with a
+  partition guarantee, the half-pixel and smoothing field construction, the translation step and the conforming meshes;
+  the competition formulation itself is a direct multi-label extension of Raya & Udupa.
+* The phantom's tubes are about 7-18 px wide, it has 7 sections, and the real example is one triplet from one tile.
+
+## 8. Known limitations and open questions
 
 * **Thin, shifting structures can bulge in the middle frames** under linear interpolation of distance fields: in an
   exploratory frame-by-frame area check (not included in this repository), a thin diagonal band grew about 3% above its
@@ -141,6 +220,7 @@ top-left crop of the 501 × 501 grid, so that test crops everything to 500 × 50
   positions (by design it moves shared vertices together).
 * **No ground truth at the 40 nm scale.** Real-data evaluation here is an 80 nm held-out section. It tests the
   midpoint only, not the four intermediate frames.
+* **Higher-order interpolation is untested on real data** (the real triplet has only two usable inputs for the held-out section).
 * **Validation is thin:** one synthetic phantom family and one real triplet from a single tile. The raw EM
   intensities are not used.
 * **Not implemented:** tiling with halos and bounding-box cropping for very large volumes; use of raw EM as an edge
