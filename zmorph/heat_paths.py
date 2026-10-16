@@ -72,11 +72,53 @@ def _trace(T, start, sink, max_iter=2000, stencil=2, grad_mask=None):
     return length, term
 
 
-def heat_path_morph(sections, factor=5, grad="all", sink="own", stencil=2, max_iter=2000):
-    """grad: 'all' (as the paper describes) or 'unique' (as the Julia code does: the gradient is
-    only evaluated on pixels unique to the upper frame and is zero elsewhere).
-    sink: 'own' (the cell's own overlap, as the paper) or 'any' (any pixel where the two sections
-    carry the same label, an approximation of the code's shared overlap_keys)."""
+def _arrivals(m0, m1, mode, layer_z, L, max_iter, grad, sink, stencil):
+    """Arrival fraction in [0, 1] of the label at each pixel unique to the upper mask m1 (not in m0):
+    0 = it takes the pixel immediately, 1 = last. Returns (pixel coordinates (n, 2), arrival (n,)).
+    layer_z may be a sequence of layers; the arrival is then averaged over them.
+    mode 'paths'        the paper: path length normalised by the longest path ending at the same terminal pixel
+         'paths_global' path length normalised by the longest path of the cell
+         'rank'         area rank of the path length among the cell's unique pixels (equal-area progress)
+         'T'            1 - T/Tmax of the layer temperature over the unique pixels (no path tracing)
+         'Trank'        area rank of the layer temperature, hottest first (no path tracing)"""
+    if not np.isscalar(layer_z):               # scale-space ensemble: average the arrival over several layers
+        res = [_arrivals(m0, m1, mode, float(z), L, max_iter, grad, sink, stencil) for z in layer_z]
+        return res[0][0], np.mean([r[1] for r in res], axis=0)
+    ny, nx = m0.shape
+    uniq = m1 & ~m0
+    start = np.argwhere(uniq)
+    if len(start) == 0:
+        return start, np.zeros(0)
+    T = _layer_temperature(m0, m1, L=L, z=layer_z)
+    if mode in ("T", "Trank"):
+        t = T[start[:, 0], start[:, 1]]
+        if mode == "T":
+            return start, np.clip(1.0 - (t - t.min()) / max(t.max() - t.min(), 1e-12), 0.0, 1.0)
+        order = np.argsort(-t, kind="stable")
+        r = np.empty(len(t)); r[order] = np.arange(len(t)) / max(len(t) - 1, 1)
+        return start, r
+    sk = (m0 & m1) if sink == "own" else None
+    if sk is None or not sk.any():
+        sk = (T >= 0.98 * T.max()) if not (m0 & m1).any() else (m0 & m1)
+    length, term = _trace(T, start, sk, max_iter, stencil, uniq if grad == "unique" else None)
+    if mode == "paths":
+        gmax = np.zeros((ny, nx))
+        np.maximum.at(gmax, (term[:, 0], term[:, 1]), length)
+        denom = gmax[term[:, 0], term[:, 1]]
+        return start, np.where(denom > 0, length / np.maximum(denom, 1e-12), 0.0)
+    if mode == "paths_global":
+        return start, length / max(length.max(), 1e-12)
+    order = np.argsort(length, kind="stable")                                  # 'rank'
+    r = np.empty(len(length)); r[order] = np.arange(len(length)) / max(len(length) - 1, 1)
+    return start, r
+
+
+def heat_path_morph(sections, factor=5, grad="all", sink="own", stencil=2, max_iter=2000, layer_z=6.5, L=25.0,
+                    arrival="paths", symmetric=False):
+    """Defaults reproduce the published algorithm. `arrival` selects how the arrival fraction is computed
+    (see `_arrivals`). With `symmetric=True` a reverse pass (upper section to lower) is run as well: the
+    lower label leaves a pixel at time 1 - (its reverse arrival), and the pixel switches at the mean of the
+    two estimates, which makes the result independent of the direction of z."""
     S = len(sections)
     ny, nx = sections[0].shape
     nz = (S - 1) * factor + 1
@@ -85,25 +127,19 @@ def heat_path_morph(sections, factor=5, grad="all", sink="own", stencil=2, max_i
         vol[s * factor] = sections[s]
     for s in range(S - 1):
         s0, s1 = sections[s], sections[s + 1]
-        frames = np.repeat(s0[None], factor - 1, axis=0)
+        tf = np.full((ny, nx), np.nan)            # forward arrival of the upper label
+        tr = np.full((ny, nx), np.nan)            # reverse estimate: time at which the lower label leaves
         for k in np.union1d(np.unique(s0), np.unique(s1)):
-            m0, m1 = s0 == k, s1 == k
-            uniq = m1 & ~m0
-            if not uniq.any():
-                continue
-            T = _layer_temperature(m0, m1)
-            sk = (m0 & m1) if sink == "own" else (s0 == s1)
-            if not (m0 & m1).any():
-                sk = (T >= 0.98 * T.max()) | (sk if sink == "any" else False)
-            start = np.argwhere(uniq)
-            length, term = _trace(T, start, sk, max_iter, stencil, uniq if grad == "unique" else None)
-            gmax = np.zeros((ny, nx))
-            np.maximum.at(gmax, (term[:, 0], term[:, 1]), length)
-            denom = gmax[term[:, 0], term[:, 1]]
-            frac = np.where(denom > 0, length / np.maximum(denom, 1e-12), 0.0)
-            jmin = np.maximum(1, np.ceil(factor * frac).astype(int))
-            for j in range(1, factor):
-                sel = jmin <= j
-                frames[j - 1][start[sel, 0], start[sel, 1]] = k
-        vol[s * factor + 1:s * factor + factor] = frames
+            st, arr = _arrivals(s0 == k, s1 == k, arrival, layer_z, L, max_iter, grad, sink, stencil)
+            if len(st):
+                tf[st[:, 0], st[:, 1]] = arr
+            if symmetric:
+                st, arr = _arrivals(s1 == k, s0 == k, arrival, layer_z, L, max_iter, grad, sink, stencil)
+                if len(st):
+                    tr[st[:, 0], st[:, 1]] = 1.0 - arr
+        tstar = np.where(np.isnan(tf), tr, np.where(np.isnan(tr), tf, 0.5 * (tf + tr))) if symmetric else tf
+        for j in range(1, factor):
+            t = j / factor
+            sw = (s0 != s1) & ~np.isnan(tstar) & (t >= tstar - 1e-9)
+            vol[s * factor + j] = np.where(sw, s1, s0)
     return vol

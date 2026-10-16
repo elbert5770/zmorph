@@ -150,3 +150,28 @@ def test_tube_with_persistence_is_not_worse_than_persistence_when_the_junction_p
     gap = lambda v: evaluate(v, gt)["dice_branch_gap"]
     assert gap(b) >= gap(a) - 0.01                                           # junction pair: falls back to the guard
     assert evaluate(b, gt)["dice_mid"] >= evaluate(a, gt)["dice_mid"]        # and other pairs (non-overlapping parent) improve
+
+
+@pytest.mark.parametrize("kw", [dict(), dict(symmetric=True), dict(arrival="rank", symmetric=True),
+                                dict(arrival="Trank", symmetric=True, layer_z=2.0), dict(arrival="T", layer_z=[1.5, 4.5])])
+def test_heat_variants_keep_sources_exact_and_are_partitions(scene, kw):
+    gt, secs = scene
+    v = reconstruct(secs, 5, "heat", **kw)
+    assert (v[::5] == gt[::5]).all()                       # the source slices are boundary conditions
+    assert set(np.unique(v)) <= set(np.unique(gt))
+
+
+def test_symmetric_heat_is_independent_of_the_direction_of_z_but_the_published_one_is_not(scene):
+    gt, secs = scene
+    for kw in (dict(symmetric=True), dict(arrival="Trank", symmetric=True, layer_z=2.0)):
+        assert (reconstruct(secs, 5, "heat", **kw) == reconstruct(secs[::-1], 5, "heat", **kw)[::-1]).all()
+    assert (reconstruct(secs, 5, "heat") != reconstruct(secs[::-1], 5, "heat")[::-1]).any()
+
+
+def test_heat2_improves_on_the_published_heat_algorithm_on_the_arch_and_tilted_phantoms():
+    for fn in (phantom.scene_branch, phantom.scene_tilted):
+        g = fn()
+        s = [g[z] for z in range(0, g.shape[0], 5)]
+        old = evaluate(reconstruct(s, 5, "heat"), g)["bdist_mid"]
+        new = evaluate(reconstruct(s, 5, "heat2"), g)["bdist_mid"]
+        assert new < old

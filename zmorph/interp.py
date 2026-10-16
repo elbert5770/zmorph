@@ -13,6 +13,7 @@ Methods
   harmonic  per-label harmonic (steady-state heat / random-walker) field between the sections,
             solved in closed form with a 2-D DCT -- the manuscript's field, without path tracing
   heat      port of the manuscript's isotherm-path morphing (see heat_paths.py)
+  heat2     improved heat method: temperature-rank arrival, time-symmetric, observation layer z=2
   sdf0_cubic / sdf0_4pt   higher-order SDF interpolation from several sections with textbook fields
   sdf_cubic  / sdf_4pt    the same interpolation orders with the proposed field construction
 """
@@ -431,6 +432,9 @@ def reconstruct(sections, factor=5, method="sdf", clean=False, min_area=12, **kw
     if method == "heat":
         from .heat_paths import heat_path_morph
         return heat_path_morph(sections, factor, **kw)
+    if method == "heat2":     # improved heat method: temperature-rank arrival, time-symmetric, observation layer near the face
+        from .heat_paths import heat_path_morph
+        return heat_path_morph(sections, factor, **{**dict(arrival="Trank", symmetric=True, layer_z=2.0), **kw})
     if method in ("sdf_cubic", "sdf_4pt", "sdf0_cubic", "sdf0_4pt"):
         classic = method.startswith("sdf0")
         kw = dict(kw)
