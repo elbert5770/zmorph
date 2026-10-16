@@ -198,3 +198,16 @@ def test_heat2_guard_is_neutral_when_nothing_vanishes_and_rescues_the_split_scen
         v = heat_sdf_morph(secs, 5, mode)
         assert min((v[z] == 1).sum() for z in range(16, 20)) > 0 > -1
         assert evaluate(v, gt)["dice_branch_gap"] > evaluate(plain, gt)["dice_branch_gap"] + 0.5
+
+
+def test_tiling_with_a_large_halo_matches_the_full_frame_and_a_zero_halo_does_not():
+    from zmorph.tiling import reconstruct_tiled, tile_slices
+    assert tile_slices(501, 250) == [(0, 250), (250, 501)]
+    gt = phantom.scene_branch()
+    secs = [gt[z] for z in range(0, gt.shape[0], 5)]
+    f = lambda s, k: reconstruct(s, k, "sdf")
+    full = f(secs, 5)
+    big = reconstruct_tiled(secs, 5, f, tile=64, halo=48)
+    none = reconstruct_tiled(secs, 5, f, tile=64, halo=0)
+    assert (big != full).mean() < (none != full).mean()
+    assert (big[::5] == full[::5]).mean() > 0.999
