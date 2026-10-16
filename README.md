@@ -90,11 +90,12 @@ changes accuracy by less than 0.3 points compared with the textbook linear SDF; 
 ### Stress test: a thin neurite splitting into three non-overlapping branches (`docs/METHOD.md` §8)
 
 `phantom.scene_split3`, images in `results/split3_scene.png` and `results/split3_methods.png` (tilted neurites:
-`results/tilted_scene.png`). No daughter overlaps the parent's section footprint. **All SDF-based methods delete the
-neurite in the gap** (the proposed method scores gap Dice 0.000, classic linear SDF 0.085), and no method beats repeating
-the nearest section (0.590). An optional persistence guard (`persist=True`) brings the proposed method to 0.580 and avoids
-cutting the neurite; component-wise translation (`align="component"`) reaches 0.294 with spurious fragments. Placing the
-branches correctly would need centreline-aware interpolation, which is not implemented.
+`results/tilted_scene.png`). No daughter overlaps the parent's section footprint, and no post-filter is used. **All
+SDF-based methods delete the neurite in the gap** (the proposed method scores gap Dice 0.000, classic linear SDF 0.085).
+Only the raw heat-path port beats repeating the nearest section (0.628 vs 0.590), with 6-9 spurious fragments in slices
+17-19 where the truth has 1-3. An optional persistence guard (`persist=True`) brings the proposed method to 0.580 and
+avoids cutting the neurite; component-wise translation (`align="component"`) reaches 0.294 with spurious fragments.
+Placing the branches correctly would need centreline-aware interpolation, which is not implemented.
 
 ## Real-data example: MICrONS sections 17414–17416
 

@@ -235,7 +235,7 @@ steeply, which makes their section footprints long ellipses (30-40 px). It is an
 | cubic-spline SDF (binary fields) | 0.462 | 0.429 | 0.892 | 0.54 | [1, 7, 5, 7] |
 | 4-point SDF (binary fields) | 0.361 | 0.330 | 0.897 | 0.49 | [1, 3, 3, 7] |
 | harmonic | 0.417 | 0.381 | 0.872 | 1.66 | [1, 1, 0, 3] |
-| heat-paths port + majority | 0.527 | 0.507 | 0.881 | 0.66 | [1, 1, 4, 4] |
+| heat-paths port (raw, no filter) | 0.628 | 0.620 | 0.892 | 0.68 | [1, 6, 9, 8] |
 | proposed (linear) | 0.000 | 0.000 | 0.798 | 3.02 | [0, 0, 0, 0] |
 | proposed, negative side truncated at 2 | 0.052 | 0.024 | 0.813 | 2.32 | [1, 0, 0, 1] |
 | proposed + label translation | 0.128 | 0.000 | 0.834 | 1.64 | [1, 1, 1, 1] |
@@ -246,14 +246,36 @@ steeply, which makes their section footprints long ellipses (30-40 px). It is an
 (Sections 0-25, 6 sections; noisy = boundary jitter and isolated wrong pixels, no badly imputed section. The translation
 variants use a search window of 40 px.)
 
+### How each method carries the neurite through the gap (clean sections): neurite pixels / components per slice
+
+| method | z=15 (section) | 16 | 17 | 18 | 19 | z=20 (section) |
+|---|---|---|---|---|---|---|
+| **ground truth** | 115 / 1 | 180 / 1 | 255 / 1 | 309 / 1 | 309 / 3 | 309 / 3 |
+| nearest (repeat) | 115 / 1 | 115 / 1 | 115 / 1 | 309 / 3 | 309 / 3 | 309 / 3 |
+| Raya-Udupa linear SDF | 115 / 1 | 21 / 6 | 0 / 0 | 0 / 0 | 26 / 8 | 309 / 3 |
+| cubic-spline SDF (binary fields) | 115 / 1 | 98 / 1 | 38 / 7 | 28 / 5 | 163 / 7 | 309 / 3 |
+| 4-point SDF (binary fields) | 115 / 1 | 74 / 1 | 11 / 3 | 11 / 3 | 138 / 7 | 309 / 3 |
+| harmonic | 115 / 1 | 95 / 1 | 12 / 1 | 0 / 0 | 244 / 3 | 309 / 3 |
+| heat-paths port (raw, no filter) | 115 / 1 | 101 / 1 | 97 / 6 | 183 / 9 | 283 / 8 | 309 / 3 |
+| proposed (linear) | 111 / 1 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 295 / 3 |
+| proposed, negative side truncated at 2 | 111 / 1 | 21 / 1 | 0 / 0 | 0 / 0 | 7 / 1 | 295 / 3 |
+| proposed + label translation | 111 / 1 | 35 / 1 | 5 / 1 | 4 / 1 | 28 / 1 | 295 / 3 |
+| proposed + component translation | 111 / 1 | 85 / 1 | 25 / 3 | 14 / 3 | 60 / 7 | 295 / 3 |
+| proposed + persistence guard | 111 / 1 | 111 / 1 | 111 / 1 | 295 / 3 | 295 / 3 | 295 / 3 |
+| component translation + persistence guard | 111 / 1 | 85 / 1 | 133 / 1 | 303 / 3 | 60 / 7 | 295 / 3 |
+
 What it shows:
 
-* **Nothing beats repeating the nearest section for this neurite** (Dice 0.590 in the gap). The best alternatives are the
-  persistence-guarded proposed method (0.580), the manuscript port with the majority filter (0.527) and the cubic-spline
-  SDF (0.462). These are single-scene results on a deliberately hard geometry.
+* **Only the raw heat-path port beats repeating the nearest section for this neurite, and only on Dice** (gap Dice 0.628 clean
+  and 0.620 noisy, against 0.590 and 0.571 for nearest). No filter is applied to any method here. Its pixels follow the
+  growing branches (neurite area 101, 97, 183, 283 in slices 16-19, truth 180, 255, 309, 309), but they are speckled: 6, 9 and 8
+  components in slices 17-19 where the truth has 1, 1 and 3, and its Dice over all cells (0.892) is below nearest (0.908).
+  A 3-D majority filter removes the speckle but erodes thin structures (it lowered this port's neurite Dice to 0.527 in an
+  earlier run, and applied to the whole stack it also shrinks thin cells on the source slices). The next best are the persistence-guarded
+  proposed method (0.580), cubic-spline SDF (0.462) and harmonic (0.417).
 * **Signed-distance interpolation deletes the neurite in the gap.** With no overlap between the thin footprints, the
   blend `(1-t)·f0 + t·f1` is negative everywhere, so the label has zero voxels in most intermediate slices
-  (Raya & Udupa: Dice 0.085; proposed: 0.000, components 0, 0, 0, 0 in slices 16-19). This is the known limitation of
+  (Raya & Udupa: Dice 0.085; proposed: 0.000, area 0 in slices 16-19). This is the known limitation of
   shape-based interpolation for shapes that do not overlap. For meshing it is the worst outcome: the neurite would be
   cut in two.
 * **Truncating the negative side** of the distance (`neg_cap`, as in truncated SDFs) is harmless on the other phantoms
@@ -265,7 +287,7 @@ What it shows:
   at slice 19) and needs a search window large enough for the displacement (40 px here, against a default of 24).
 * **The persistence guard** (`persist=True`) restores a label from the nearer section whenever its area in an
   intermediate slice falls below half of the smaller section area. On this scene it lifts the proposed method from 0.000
-  to 0.580 (about the same as nearest, 0.590) and leaves the other phantoms unchanged (identical output on the arch scene, unchanged
+  to 0.580 (about the same as nearest, 0.590, and below the raw heat-path port, 0.628) and leaves the other phantoms unchanged (identical output on the arch scene, unchanged
   metrics on the tilted scene). It is a safeguard against deletion, not a way to place the structure correctly.
   It is off by default because it has been checked on three phantoms only.
 * **What would be needed.** The true intermediate slices (`results/split3_methods.png`, top row) show the three branches

@@ -66,7 +66,7 @@ rows = {"ground truth": gt,
         "nearest (repeat)": reconstruct(secs, 5, "nearest"),
         "Raya-Udupa linear SDF": reconstruct(secs, 5, "sdf0"),
         "cubic-spline SDF (binary)": reconstruct(secs, 5, "sdf0_cubic"),
-        "heat-paths port + majority": majority(reconstruct(secs, 5, "heat"), 2),
+        "heat-paths port (raw, no filter)": reconstruct(secs, 5, "heat"),
         "proposed (linear)": reconstruct(secs, 5, "sdf"),
         "proposed + component translation": reconstruct(secs, 5, "sdf", align="component", maxshift=40),
         "proposed + persistence guard": reconstruct(secs, 5, "sdf", persist=True)}
