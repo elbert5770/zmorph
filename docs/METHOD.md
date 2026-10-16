@@ -554,7 +554,64 @@ combinations (`run_fusion_study.py`, `results/fusion_study.md`; no post-filter; 
   trusted. A per-label choice of the method from the overlap statistics (high overlap: SDF; none: heat2 or tube links) is the
   obvious way to get the best of each automatically; it is not implemented or tested.
 
-## 10. Known limitations and open questions
+## 10. Frame edges: overlap-tile processing
+
+Each pipeline frame (501 x 501 px) is processed on its own and overlaps its neighbour by a single pixel, so the content of
+a frame stops at its edge and the manuscript lists edge behaviour as unresolved. Every method here is affected: the Gaussian
+smoothing of the SDF replicates the border, the heat solve (DCT) imposes no-flux (mirror) conditions there, the translation
+search and the tube-link descriptors see truncated footprints, and cells cut by the edge look as if they appeared or ended.
+When the adjacent frames are available, the remedy is a halo: pad each tile with real neighbour pixels, interpolate the padded
+tile, keep only the centre (`zmorph.tiling.reconstruct_tiled(sections, factor, method, tile, halo)`).
+
+**Experiment** (`run_edge_study.py`, `results/edge_study.md`). The real held-out test (predict 17415 from 17414 and 17416, smoothed and
+raw) is cut into 2 x 2 tiles of about 250 px; each tile is interpolated on its own with a halo of 0, 8, 24 or 64 px of real neighbour
+data and the assembled prediction is scored by distance to the internal tile boundary (bands 0-4, 4-12, 12-24 and > 24 px),
+against the same method run on the whole frame. Entries below are the accuracy change in percentage points in the 0-4 px band
+(smoothed / raw; negative = loss caused by tiling).
+
+| method | halo 0 | halo 8 | halo 24 | halo 64 |
+|---|---|---|---|---|
+| heat, published | -1.9 / -3.1 | +0.8 / -0.4 | +0.8 / -0.1 | -0.0 / -0.0 |
+| heat2 | -3.8 / -3.7 | -0.7 / -0.7 | +0.1 / +0.0 | +0.2 / +0.1 |
+| sdf | -2.1 / -2.7 | -0.0 / -0.0 | +0.0 / +0.0 | +0.0 / +0.0 |
+| sdf + translation | -2.0 / -2.8 | +0.5 / +0.1 | +0.3 / +0.0 | +0.6 / +0.2 |
+| sdf_rank (fusion) | -2.2 / -1.9 | -0.4 / -0.2 | -0.3 / -0.1 | -0.2 / -0.2 |
+| rank_avg (fusion) | -2.5 / -2.4 | -0.3 / -0.3 | +0.0 / +0.1 | +0.0 / +0.1 |
+
+Disagreement with the whole-frame result (percentage of pixels that differ; smoothed / raw):
+
+| method | halo 0 | halo 8 | halo 24 | halo 64 |
+|---|---|---|---|---|
+| heat, published | 0.74% / 0.65% | 0.35% / 0.31% | 0.12% / 0.09% | 0.00% / 0.00% |
+| heat2 | 2.07% / 2.03% | 1.71% / 1.69% | 1.43% / 1.42% | 0.75% / 0.74% |
+| sdf | 0.71% / 0.62% | 0.45% / 0.34% | 0.45% / 0.34% | 0.36% / 0.25% |
+| sdf + translation | 1.08% / 1.00% | 0.80% / 0.69% | 0.67% / 0.55% | 0.53% / 0.43% |
+| sdf_rank (fusion) | 1.15% / 1.09% | 0.95% / 0.88% | 0.94% / 0.85% | 0.47% / 0.37% |
+| rank_avg (fusion) | 1.48% / 1.40% | 1.22% / 1.13% | 1.09% / 1.00% | 0.59% / 0.52% |
+
+* **The edge penalty is confined to the first ~12 px and is largest without a halo**: 1.9-3.8 points in the 0-4 px band
+  (smoothed) and 1.9-3.7 (raw) for every method; beyond 24 px from the boundary there is no loss.
+* **The SDF method is the most edge-robust.** A halo of 8 px removes its loss completely (0.0 in every band, both datasets), it
+  stays closest to the whole-frame result of the methods with sub-pixel smoothing (0.25-0.45% of pixels differ for halos of
+  8-64), and it is local: its reach is set by the distance cap (12 px) and the smoothing width.
+* **The published heat method** is also fixed by a halo (8 px; at 64 px it is identical to the whole-frame result, 0.00% of
+  pixels differ), but its accuracy is lower overall.
+* **The rank-based methods (heat2, sdf_rank, rank_avg) need a halo of about 24 px and never reproduce the whole-frame result**
+  (0.6-1.5% of pixels differ even at 64 px): their equal-area arrival ranks are computed over all pixels of a label inside the tile,
+  so the switch times of the same pixel depend on the tile that contains it. Accuracy is fine with a halo of 24 px (loss at most
+  0.3 points), but neighbouring tiles can disagree at their common boundary. A global normalisation (ranks over the halo-padded
+  neighbourhood, or over the full frame) would remove this; it is not implemented.
+* **Translation (`align=True`) is not hurt by tiling; it even gains** (+0.1 to +0.6 points in the edge band with a halo, against the
+  whole-frame run): its rigid shift is estimated per label, and a tile gives a more local estimate than a label that has
+  components far apart. This was not investigated further.
+* **Recommendation when the adjacent frames are available:** use the SDF method (with translation if desired) with a halo of at least
+  max(24 px, the translation search window); use heat2 or the fusion modes only with a halo of at least 24 px and accept
+  tile-dependent switch times. At the true border of the volume nothing is available: the SDF replicates the border and the heat
+  solve mirrors it, both reasonable for cells that continue.
+* The experiment cuts one real tile (single triplet) into artificial sub-tiles; the true 1-pixel tile overlap of the pipeline and
+  the volume border were not tested, and the phantoms were not used for this study.
+
+## 11. Known limitations and open questions
 
 * **Thin, shifting structures can bulge in the middle frames** under linear interpolation of distance fields: in an
   exploratory frame-by-frame area check (not included in this repository), a thin diagonal band grew about 3% above its

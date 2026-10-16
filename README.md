@@ -107,6 +107,14 @@ noise-robust and ties the SDF method on real data. Restoring vanishing labels fr
 safety net, and SDF + tube links + heat2 guard (`tube_guard`) is best on the split-scene variants (mean gap Dice 0.799). No
 single combination wins everywhere; §9.5 gives the regime-by-regime picture.
 
+### Frame edges (`docs/METHOD.md` §10, `results/edge_study.md`, `zmorph.tiling.reconstruct_tiled`)
+
+Cutting the real held-out test into tiles costs every method 1.9-3.8 accuracy points in the 4 px next to the tile boundary
+(nothing beyond 24 px). With the adjacent frames available, padding each tile with a halo of real neighbour pixels removes it:
+the SDF method needs only 8 px and then matches the whole-frame result; the rank-based methods (heat2, sdf_rank, rank_avg) need
+about 24 px and still differ from the whole-frame result in 0.6-1.5% of pixels, because their arrival ranks depend on the tile.
+Recommended: SDF (+ translation) with a halo of at least max(24 px, translation window).
+
 ### Stress test: a thin neurite splitting into three non-overlapping branches (`docs/METHOD.md` §8)
 
 `phantom.scene_split3`, images in `results/split3_scene.png` and `results/split3_methods.png` (tilted neurites:
@@ -161,7 +169,7 @@ heat-paths + majority 0.921, harmonic 0.934, classic SDF 0.944, sdf σ=1 0.943, 
 * The translation is one rigid shift per label: it does not handle a label whose parts move in different
   directions.
 * Possible artefact: thin, shifting structures may bulge in the middle frames under linear SDF interpolation (seen in
-  an exploratory check not included here; see `docs/METHOD.md`, section 10).
+  an exploratory check not included here; see `docs/METHOD.md`, section 11).
 * Not implemented: tiling with halos / bounding-box cropping for very large volumes, use of raw EM intensities
   as an edge prior.
 
