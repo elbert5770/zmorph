@@ -88,7 +88,84 @@ def _components(mask):
     return [cc == i for i in range(1, n + 1)]
 
 
-def _component_fields(m0, m1, fld, ts, p):
+
+def _descriptor(mask, min_area=12, min_slope=1.0):
+    """Centroid c (y, x), unit major axis u (y, x) and tilt slope v (pixels per z voxel) of a footprint.
+    A thin straight tube of radius r with in-plane slope v cuts a z-plane in an ellipse with semi-axes
+    a = r*sqrt(1 + v^2) and b = r, so v = sqrt((a/b)^2 - 1) = sqrt(lambda1/lambda2 - 1) from the second moments.
+    Footprints below `min_area` or with v < `min_slope` are treated as vertical (v = 0)."""
+    ys, xs = np.nonzero(mask)
+    c = np.array([ys.mean(), xs.mean()])
+    if len(ys) < min_area:
+        return c, np.array([0.0, 1.0]), 0.0, 0.0
+    cov = np.cov(np.stack([ys, xs]))
+    w, V = np.linalg.eigh(cov)
+    u = V[:, 1]
+    v = float(np.sqrt(max(w[1] / max(w[0], 1e-6) - 1.0, 0.0)))
+    # how ellipse-like is the footprint? IoU with the uniform ellipse that has the same second moments
+    a, b = 2.0 * np.sqrt(max(w[1], 1e-6)), 2.0 * np.sqrt(max(w[0], 1e-6))
+    y0, y1, x0, x1 = ys.min() - 2, ys.max() + 3, xs.min() - 2, xs.max() + 3
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    d = np.stack([yy - c[0], xx - c[1]], -1)
+    e = ((d @ V[:, 1]) / a) ** 2 + ((d @ V[:, 0]) / b) ** 2 <= 1.0
+    inb = (yy >= 0) & (yy < mask.shape[0]) & (xx >= 0) & (xx < mask.shape[1])
+    mm = np.zeros(e.shape, bool)
+    mm[inb] = mask[yy[inb], xx[inb]]
+    ell = float((mm & e).sum() / max((mm | e).sum(), 1))
+    return c, u, (v if v >= min_slope else 0.0), ell
+
+
+def _tube_link(m0, m1, L, p):
+    """Can the non-overlapping footprints m0 (lower section) and m1 (upper section) be two cross-sections of
+    one tube that branches or ends between them? Tests both directions: the axis of m1, extended back
+    along its tilt, must enter m0's footprint (or m0's axis extended forward must enter m1's), within `tube_tol`
+    pixels, at some height in the gap. Returns None or dict(mode, shift, zJ): `mode` 'up' = m1's tube is
+    extended back (m0 holds until zJ, then m1 shifted back), 'down' = m0's tube is extended forward
+    (m0 shifted forward until zJ, then m1 holds)."""
+    zs = np.linspace(0.0, L, 41)
+    best = None
+    c0, u0, v0, e0 = _descriptor(m0, p["tube_min_area"], p["tube_min_slope"])
+    c1, u1, v1, e1 = _descriptor(m1, p["tube_min_area"], p["tube_min_slope"])
+    ny, nx = m0.shape
+    for mode, (src, tgt, c, u, v, ell) in (("up", (m1, m0, c1, u1, v1, e1)), ("down", (m0, m1, c0, u0, v0, e0))):
+        if v == 0.0 or ell < p["tube_min_ellipse"]:
+            continue
+        dist = ndi.distance_transform_edt(~tgt)
+        for sg in (1.0, -1.0):
+            if mode == "up":      # axis of m1 at height z (0 = lower section): c1 - sg*v*u*(L - z)
+                pts = c[None, :] - sg * v * u[None, :] * (L - zs)[:, None]
+            else:                 # axis of m0 at height z: c0 + sg*v*u*z
+                pts = c[None, :] + sg * v * u[None, :] * zs[:, None]
+            ij = np.rint(pts).astype(int)
+            ok = (ij[:, 0] >= 0) & (ij[:, 0] < ny) & (ij[:, 1] >= 0) & (ij[:, 1] < nx)
+            d = np.full(len(zs), np.inf)
+            d[ok] = dist[ij[ok, 0], ij[ok, 1]]
+            hit = np.nonzero(d <= p["tube_tol"])[0]
+            if hit.size == 0:
+                continue
+            # up: the tube of m1 exists above the last height at which its axis is inside m0's neighbourhood;
+            # down: the tube of m0 exists below the first height at which its axis reaches m1.
+            ct = np.array([np.nonzero(tgt)[0].mean(), np.nonzero(tgt)[1].mean()])
+            k = hit[np.argmin(np.linalg.norm(pts[hit] - ct[None, :], axis=1))]   # axis passes closest to the partner's centre
+            score = float(np.linalg.norm(pts[k] - ct))
+            if mode == "down":    # the same tube must continue: the translated footprint has to match the partner
+                moved = ndi.shift(src.astype(float), sg * v * u * L, order=0) > 0.5
+                if (moved & tgt).sum() / max((moved | tgt).sum(), 1) < p["tube_min_continue"]:
+                    continue
+            if best is None or score < best[0] - 1e-9:
+                best = (score, dict(mode=mode, shift=sg * v * u, zJ=float(zs[k])))
+    if v0 > 0.0 and v1 > 0.0 and min(e0, e1) >= p["tube_min_ellipse"]:     # both axes extended: the junction is where the two lines meet
+        for s0_ in (1.0, -1.0):
+            for s1_ in (1.0, -1.0):
+                a = c0[None, :] + s0_ * v0 * u0[None, :] * zs[:, None]
+                b = c1[None, :] - s1_ * v1 * u1[None, :] * (L - zs)[:, None]
+                d = np.linalg.norm(a - b, axis=1)
+                k = int(np.argmin(d))
+                if d[k] <= p["tube_tol"] and (best is None or d[k] < best[0] - 1e-9):
+                    best = (float(d[k]), dict(mode="both", shift=s0_ * v0 * u0, shift1=s1_ * v1 * u1, zJ=float(zs[k])))
+    return None if best is None else best[1]
+
+def _component_fields(m0, m1, fld, ts, p, translate=True):
     """Component-wise translation for splits and fusions. Every connected component of the label in one
     section is paired with its best-overlapping component in the other section (after the best
     translation, `_estimate_shift`); a component may be paired with several (split) or be the partner of
@@ -102,10 +179,22 @@ def _component_fields(m0, m1, fld, ts, p):
     shift = {}
     for i, a in enumerate(c0):
         for j, b in enumerate(c1):
-            d = _estimate_shift(a, b, maxshift=p["maxshift"], iou_gate=1.01)
+            d = _estimate_shift(a, b, maxshift=p["maxshift"], iou_gate=1.01) if translate else np.zeros(2)
             sh = ndi.shift(a.astype(float), d, order=0) > 0.5 if d.any() else a
             iou[i, j] = (sh & b).sum() / max((sh | b).sum(), 1)
             shift[i, j] = d
+    tubes = {}
+    if p.get("tube"):
+        for i in range(len(c0)):
+            for j in range(len(c1)):
+                if (c0[i] & c1[j]).any():
+                    continue
+                lk = _tube_link(c0[i], c1[j], p["L"], p)
+                if lk is not None:
+                    tubes[i, j] = lk
+                    iou[i, j] = 0.0          # a tube link replaces a translation match for this pair
+    if not translate and not tubes:
+        return None                     # tube mode found nothing: leave this label to the ordinary label-level field
     pairs = set()
     for j in range(len(c1)):
         i = int(np.argmax(iou[:, j]))
@@ -115,8 +204,8 @@ def _component_fields(m0, m1, fld, ts, p):
         j = int(np.argmax(iou[i]))
         if iou[i, j] > p["min_iou"]:
             pairs.add((i, j))
-    pairs |= {(i, None) for i in range(len(c0)) if not any(q[0] == i for q in pairs)}
-    pairs |= {(None, j) for j in range(len(c1)) if not any(q[1] == j for q in pairs)}
+    pairs |= {(i, None) for i in range(len(c0)) if not any(q[0] == i for q in pairs) and not any(k[0] == i for k in tubes)}
+    pairs |= {(None, j) for j in range(len(c1)) if not any(q[1] == j for q in pairs) and not any(k[1] == j for k in tubes)}
     f0 = [fld(a) for a in c0]
     f1 = [fld(b) for b in c1]
     gone = np.full(m0.shape, -min(p["absent"], p["neg_cap"] if p["neg_cap"] is not None else p["cap"]))
@@ -131,6 +220,17 @@ def _component_fields(m0, m1, fld, ts, p):
                 a0 = ndi.shift(a0, t * d, order=1, mode="nearest")
                 a1 = ndi.shift(a1, -(1 - t) * d, order=1, mode="nearest")
             v = (1 - t) * a0 + t * a1
+            best = v if best is None else np.maximum(best, v)
+        for (i, j), lk in tubes.items():     # tube-linked pair: hard switch at the junction height, shifted along the axis
+            z = t * p["L"]
+            if lk["mode"] == "both":
+                f = ndi.shift(f0[i], lk["shift"] * z, order=1, mode="nearest") if z <= lk["zJ"] else \
+                    ndi.shift(f1[j], -lk["shift1"] * (p["L"] - z), order=1, mode="nearest")
+            elif lk["mode"] == "up":
+                f = f0[i] if z <= lk["zJ"] else ndi.shift(f1[j], -lk["shift"] * (p["L"] - z), order=1, mode="nearest")
+            else:
+                f = ndi.shift(f0[i], lk["shift"] * z, order=1, mode="nearest") if z <= lk["zJ"] else f1[j]
+            v = np.where(f > 0, f + 24.0, f)      # the tube asserts presence: it overrides neighbours inside its footprint
             best = v if best is None else np.maximum(best, v)
         out.append(best)
     return out
@@ -179,8 +279,8 @@ def _pair_fields(s0, s1, ts, kind, p):
 
     for k in labels:
         m0, m1 = s0 == k, s1 == k
-        if p["align"] == "component" and m0.any() and m1.any():
-            res = _component_fields(m0, m1, fld, ts, p)
+        if (p["align"] == "component" or p["tube"]) and m0.any() and m1.any():
+            res = _component_fields(m0, m1, fld, ts, p, translate=(p["align"] == "component"))
             if res is not None:
                 yield k, res
                 continue
@@ -232,7 +332,9 @@ def competition(sections, factor=5, kind="sdf", return_fields=False, **kw):
     (the latter two are what the conforming mesher needs)."""
     p = dict(sigma=1.0, absent=4.0, cap=12.0, subvoxel=True, align=False, iou_gate=1.01, L=float(factor),
              maxshift=24, min_iou=0.05, max_pairs=64, neg_cap=None,
-             persist=False, persist_frac=0.5)
+             persist=False, persist_frac=0.5,
+             tube=False, tube_tol=3.0, tube_min_area=12, tube_min_slope=1.0,
+             tube_min_ellipse=0.6, tube_min_continue=0.3)
     p.update(kw)
     S = len(sections)
     ny, nx = sections[0].shape

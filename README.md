@@ -49,6 +49,7 @@ interfaces without explicit identification of object boundaries*, bioRxiv 2025.0
     python run_sweeps.py                # results/sweeps.md   (shift, sigma/absent, noise level)
     python run_published_comparison.py  # results/published_sdf.md (published SDF methods, ablations)
     python run_split_experiment.py      # results/split3.md (neurite splitting into three branches)
+    python run_split_sweep.py           # results/split3_sweep.md (tube-link robustness)
     python make_scene_figures.py        # results/tilted_scene.png, split3_scene.png, split3_methods.png
     python make_figures.py              # results/fig6_*.png  (Figure-6-style branching arch)
     python run_mesh_demo.py             # results/mesh.md, results/mesh_arch.png
@@ -91,11 +92,15 @@ changes accuracy by less than 0.3 points compared with the textbook linear SDF; 
 
 `phantom.scene_split3`, images in `results/split3_scene.png` and `results/split3_methods.png` (tilted neurites:
 `results/tilted_scene.png`). No daughter overlaps the parent's section footprint, and no post-filter is used. **All
-SDF-based methods delete the neurite in the gap** (the proposed method scores gap Dice 0.000, classic linear SDF 0.085).
-Only the raw heat-path port beats repeating the nearest section (0.628 vs 0.590), with 6-9 spurious fragments in slices
-17-19 where the truth has 1-3. An optional persistence guard (`persist=True`) brings the proposed method to 0.580 and
-avoids cutting the neurite; component-wise translation (`align="component"`) reaches 0.294 with spurious fragments.
-Placing the branches correctly would need centreline-aware interpolation, which is not implemented.
+SDF-based methods delete the neurite in the gap** (the proposed method scores gap Dice 0.000, classic linear SDF 0.085);
+only the raw heat-path port beats repeating the nearest section (0.628 vs 0.590), with 6-9 spurious fragments.
+**Tube links** (`tube=True`) infer each footprint's tilt from its elongation, test that the axes close on the partner
+footprint, and render the intermediate slices as the tube's cross-section: gap Dice **0.927** (0.888 noisy), the three
+branches and the junction are reproduced, and the output is bit-identical to the baseline where no link is accepted. They
+work when the daughters are resolved ellipses at the upper section and fall back to a persistence guard (`persist=True`,
+about nearest-section level) when the junction is mid-gap. **Caveats:** the phantom is built from the geometry the method
+assumes, and on the real MICrONS tile no link is accepted (the situation is rare there at the 40 nm gap), so there is no
+real-data evidence yet (`examples/scan_hard_cases.py` measures prevalence on more data).
 
 ## Real-data example: MICrONS sections 17414–17416
 

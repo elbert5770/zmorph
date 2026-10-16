@@ -110,3 +110,43 @@ def test_component_translation_is_a_partition_and_keeps_sections():
     v = reconstruct(secs, 5, "sdf", align="component", maxshift=40)
     assert set(np.unique(v)) <= set(np.unique(gt))
     assert (v[::5] == gt[::5]).mean() > 0.999
+
+
+def test_descriptor_recovers_tilt_from_footprint_elongation():
+    """A tube of radius r and slope v cuts a plane in an ellipse with a/b = sqrt(1+v^2)."""
+    from zmorph.interp import _descriptor
+    yy, xx = np.mgrid[0:80, 0:160]
+    r, v = 3.0, 4.0
+    a = r * np.sqrt(1 + v * v)
+    m = ((xx - 80) / a) ** 2 + ((yy - 40) / r) ** 2 <= 1.0
+    c, u, vv, ell = _descriptor(m)
+    assert abs(vv - v) / v < 0.15 and abs(u[1]) > 0.99 and ell > 0.9      # pixelisation biases a 3 px radius by about +11%
+
+
+def test_tube_links_solve_the_split_scene_and_do_no_harm_elsewhere():
+    from zmorph.interp import _components, _tube_link
+    gt = phantom.scene_split3()
+    secs = [gt[z] for z in range(0, 26, 5)]
+    p = dict(tube_min_area=12, tube_min_slope=1.0, tube_tol=3.0, tube_min_ellipse=0.6, tube_min_continue=0.3)
+    speeds = []
+    for d in _components(secs[4] == 1):
+        lk = _tube_link(secs[3] == 1, d, 5.0, p)
+        assert lk is not None and lk["mode"] == "up" and 0.0 < lk["zJ"] < 2.0   # junction estimated near the true z=15.5 (0.5)
+        speeds.append(float(np.linalg.norm(lk["shift"])))
+    assert all(abs(s - 6.0) < 0.8 for s in speeds)                              # true daughter speed is 6 px per z
+    r = evaluate(reconstruct(secs, 5, "sdf", tube=True, persist=True), gt)
+    assert r["dice_branch_gap"] > 0.85
+    for fn in (phantom.scene_branch, phantom.scene_tilted):                      # no overlap-free thin branches there: unchanged
+        g = fn()
+        s2 = [g[z] for z in range(0, g.shape[0], 5)]
+        assert (reconstruct(s2, 5, "sdf", tube=True) == reconstruct(s2, 5, "sdf")).all()
+
+
+def test_tube_with_persistence_is_not_worse_than_persistence_when_the_junction_pair_has_no_valid_link():
+    gt = phantom.scene_split3(zJ=17.5)       # daughters unresolved at section 20: that footprint is not an ellipse
+    secs = [gt[z] for z in range(0, 26, 5)]
+    a = reconstruct(secs, 5, "sdf", persist=True)
+    b = reconstruct(secs, 5, "sdf", tube=True, persist=True)
+    gap = lambda v: evaluate(v, gt)["dice_branch_gap"]
+    assert gap(b) >= gap(a) - 0.01                                           # junction pair: falls back to the guard
+    assert evaluate(b, gt)["dice_mid"] >= evaluate(a, gt)["dice_mid"]        # and other pairs (non-overlapping parent) improve

@@ -226,7 +226,9 @@ neurite is a single component in slices 16-18 and three components from slice 19
 Geometry notes. A straight tube of radius r overlaps its own footprint in the next section unless r < 2.5 px, because the
 cross-section is stretched along the direction of motion by sqrt(1 + speed^2). So the neurite must be thin (radius 2.0, label
 margin 0.3: about 4-5 px, roughly 35-40 nm at 8 nm pixels, at the thin end of real neurites), and the daughters leave
-steeply, which makes their section footprints long ellipses (30-40 px). It is an extreme case by construction.
+steeply, which makes their section footprints long ellipses (30-40 px). It is an extreme case by construction. Because the
+parent is also thin, its own consecutive footprints do not overlap either, so the whole neurite is a non-overlapping
+tilted-tube problem.
 
 | method | neurite Dice in gap (clean) | (noisy, 5 seeds) | Dice, all cells, intermediate slices (clean) | interface dist (px, clean) | neurite components in slices 16-19 (clean) |
 |---|---|---|---|---|---|
@@ -242,6 +244,8 @@ steeply, which makes their section footprints long ellipses (30-40 px). It is an
 | proposed + component translation | 0.294 | 0.173 | 0.855 | 0.78 | [1, 3, 3, 7] |
 | proposed + persistence guard | 0.580 | 0.568 | 0.911 | 0.50 | [1, 1, 3, 3] |
 | component translation + persistence guard | 0.483 | 0.559 | 0.907 | 0.47 | [1, 1, 3, 7] |
+| proposed + tube links | 0.927 | 0.888 | 0.978 | 0.12 | [1, 1, 3, 3] |
+| proposed + tube links + persistence guard | 0.927 | 0.888 | 0.978 | 0.12 | [1, 1, 3, 3] |
 
 (Sections 0-25, 6 sections; noisy = boundary jitter and isolated wrong pixels, no badly imputed section. The translation
 variants use a search window of 40 px.)
@@ -262,17 +266,18 @@ variants use a search window of 40 px.)
 | proposed + label translation | 111 / 1 | 35 / 1 | 5 / 1 | 4 / 1 | 28 / 1 | 295 / 3 |
 | proposed + component translation | 111 / 1 | 85 / 1 | 25 / 3 | 14 / 3 | 60 / 7 | 295 / 3 |
 | proposed + persistence guard | 111 / 1 | 111 / 1 | 111 / 1 | 295 / 3 | 295 / 3 | 295 / 3 |
+| proposed + tube links | 111 / 1 | 234 / 1 | 261 / 1 | 293 / 3 | 276 / 3 | 295 / 3 |
+| proposed + tube links + persistence guard | 111 / 1 | 234 / 1 | 261 / 1 | 293 / 3 | 276 / 3 | 295 / 3 |
 | component translation + persistence guard | 111 / 1 | 85 / 1 | 133 / 1 | 303 / 3 | 60 / 7 | 295 / 3 |
 
-What it shows:
+What it shows, without tube links:
 
 * **Only the raw heat-path port beats repeating the nearest section for this neurite, and only on Dice** (gap Dice 0.628 clean
   and 0.620 noisy, against 0.590 and 0.571 for nearest). No filter is applied to any method here. Its pixels follow the
   growing branches (neurite area 101, 97, 183, 283 in slices 16-19, truth 180, 255, 309, 309), but they are speckled: 6, 9 and 8
   components in slices 17-19 where the truth has 1, 1 and 3, and its Dice over all cells (0.892) is below nearest (0.908).
   A 3-D majority filter removes the speckle but erodes thin structures (it lowered this port's neurite Dice to 0.527 in an
-  earlier run, and applied to the whole stack it also shrinks thin cells on the source slices). The next best are the persistence-guarded
-  proposed method (0.580), cubic-spline SDF (0.462) and harmonic (0.417).
+  earlier run, and applied to the whole stack it also shrinks thin cells on the source slices).
 * **Signed-distance interpolation deletes the neurite in the gap.** With no overlap between the thin footprints, the
   blend `(1-t)·f0 + t·f1` is negative everywhere, so the label has zero voxels in most intermediate slices
   (Raya & Udupa: Dice 0.085; proposed: 0.000, area 0 in slices 16-19). This is the known limitation of
@@ -282,18 +287,82 @@ What it shows:
   (it slightly improves the tilted scene: Dice 0.883 -> 0.903 at `neg_cap=2`) but does not fix this case (0.052).
 * **A single translation per label** (`align=True`) cannot move one parent toward three daughters (0.128).
   **Component-wise translation** (`align="component"`: pair each connected component with its best partner in the other
-  section, allowing one-to-many pairs for splits and many-to-one for fusions, field = maximum over pairs) gets the topology
-  order right (1, 3, 3 components) and a clearly better Dice (0.294), but it also creates spurious fragments (7 components
-  at slice 19) and needs a search window large enough for the displacement (40 px here, against a default of 24).
+  section, allowing one-to-many pairs for splits and many-to-one for fusions, field = maximum over pairs) gets a better
+  Dice (0.294) but creates spurious fragments (7 components at slice 19) and needs a search window large enough for the
+  displacement (40 px here, against a default of 24).
 * **The persistence guard** (`persist=True`) restores a label from the nearer section whenever its area in an
-  intermediate slice falls below half of the smaller section area. On this scene it lifts the proposed method from 0.000
-  to 0.580 (about the same as nearest, 0.590, and below the raw heat-path port, 0.628) and leaves the other phantoms unchanged (identical output on the arch scene, unchanged
-  metrics on the tilted scene). It is a safeguard against deletion, not a way to place the structure correctly.
-  It is off by default because it has been checked on three phantoms only.
-* **What would be needed.** The true intermediate slices (`results/split3_methods.png`, top row) show the three branches
-  growing outward from the junction along the tube axis. Neither blending distance fields nor translating components
-  produces that growth. A method that interpolates the centreline (skeleton) of thin structures, or models tubes
-  explicitly, is the obvious next step; none is implemented here.
+  intermediate slice falls below half of the smaller section area. It lifts the proposed method from 0.000 to 0.580 (about the
+  same as nearest, 0.590, and below the raw heat-path port, 0.628) and leaves the other phantoms unchanged. It is a
+  safeguard against deletion, not a way to place the structure correctly.
+
+### Tube links (`tube=True`)
+
+The footprints themselves say how the tubes run. A thin straight tube of radius r and in-plane slope v (pixels per z voxel)
+cuts a z-plane in an ellipse with semi-axes a = r·sqrt(1 + v²) and b = r, so v = sqrt(λ1/λ2 − 1) from the second moments of
+the footprint, and the major axis gives the in-plane direction (the sign, whether the tube moves toward +u or −u as z
+increases, is not observable from one footprint). For a pair of same-label components that do not overlap, one in each
+section, `_tube_link` tests whether they can be two cross-sections of one tube that branches or ends between them:
+
+1. **Closure.** The axis of the upper footprint, extended back along its slope (either sign), must enter the lower
+   footprint within `tube_tol` (3 px), at some height in the gap; or the lower axis extended forward must enter the upper
+   footprint; or both axes extended must meet. The junction height is where the extended axis passes closest to the
+   partner's centroid.
+2. **Ellipse test.** The footprint that provides the tilt must be ellipse-like (IoU with the same-moment ellipse of at least
+   0.6). A union of several tube sections (for example an unresolved fork) fails this and is not trusted.
+3. **Continuation test.** If the lower tube is extended forward ('down'), its translated footprint must match the upper one
+   (IoU ≥ 0.3), so that a branching is not mistaken for a continuing tube.
+
+A linked pair is rendered as the tube's cross-section: the lower footprint (shifted along its axis if it is the tilted one)
+up to the junction height, and then the upper footprint shifted back along its axis (`mode` 'up'/'both'/'down'). Its field
+asserts presence (it overrides neighbouring labels inside the footprint, as the persistence guard does), so the partition
+guarantee is unchanged. The scale `L` is the gap in isotropic voxels (default: `factor`; pass `L=10` when two sections 80 nm
+apart are interpolated with `factor=2`). Unlinked pairs are left to the ordinary label-level field, so on the arch and
+tilted phantoms the output is bit-identical with and without `tube=True` (tested).
+
+On the split scene this resolves the problem: gap Dice 0.927 (clean) and 0.888 (noisy), against 0.590 / 0.571 for
+repeating the nearest section and 0.000 for the plain proposed method; the topology in slices 16-19 is [1, 1, 3, 3] against
+[1, 1, 1, 3] (the split appears one slice early). The three daughter slopes are recovered to about 10% (5.97, 5.37, 5.97 against
+a true 6.0) and the junction height is estimated at 0.4-0.75 voxels above the lower section (true 0.5). The links also repair the
+non-overlapping tilted parent along its whole length: the neurite Dice per gap pair rises from about 0.5-0.6 (nearest, guard)
+to 0.90-0.95 (`results/split3_methods.png`, bottom row).
+
+Robustness on the split phantom (`run_split_sweep.py`, `results/split3_sweep.md`; neurite Dice in the gap, clean / noisy mean of 5 seeds):
+
+Neurite Dice in the gap slices 16-19 (clean sections / mean of seeds with boundary noise).
+
+| variant | nearest | proposed | persist | tube | tube + persist |
+|---|---|---|---|---|---|
+| baseline (junction z=15.5, 6 px/z, r=2.0) | 0.590 / 0.571 | 0.000 / 0.000 | 0.580 / 0.568 | 0.927 / 0.888 | 0.927 / 0.888 |
+| junction z=16.5 | 0.576 / 0.552 | 0.007 / 0.001 | 0.566 / 0.553 | 0.879 / 0.867 | 0.879 / 0.867 |
+| junction z=17.5 (mid-gap) | 0.636 / 0.611 | 0.032 / 0.038 | 0.658 / 0.641 | 0.032 / 0.038 | 0.658 / 0.641 |
+| junction z=18.5 | 0.628 / 0.606 | 0.139 / 0.102 | 0.630 / 0.622 | 0.139 / 0.102 | 0.630 / 0.622 |
+| junction z=19.5 | 0.547 / 0.541 | 0.183 / 0.127 | 0.548 / 0.547 | 0.183 / 0.127 | 0.548 / 0.547 |
+| daughter speed 4.5 px/z | 0.597 / 0.573 | 0.015 / 0.006 | 0.588 / 0.573 | 0.921 / 0.884 | 0.921 / 0.884 |
+| daughter speed 7.5 px/z | 0.584 / 0.564 | 0.000 / 0.000 | 0.575 / 0.559 | 0.928 / 0.876 | 0.928 / 0.876 |
+| radius 2.4 (footprints overlap) | 0.704 / 0.675 | 0.425 / 0.385 | 0.578 / 0.603 | 0.425 / 0.555 | 0.578 / 0.625 |
+
+* The links work when the daughters are resolved as separate ellipses at the upper section (junction at or below z=16.5)
+  and for daughter slopes of 4.5-7.5.
+* When the junction is mid-gap or later (z ≥ 17.5) the daughters have not separated at the upper section, so its footprint is
+  a union (an arrowhead) and fails the ellipse test; the pair then falls back to the persistence guard (about 0.63-0.66,
+  the level of repeating the nearest section). A decomposition of such footprints into several tube sections is not
+  implemented.
+* When the footprints overlap (radius 2.4) no link is attempted and the result is the ordinary one (0.425 for the plain
+  method, 0.578 with the guard, against 0.704 for nearest, which here preserves the overlap).
+
+**Status and caveats.**
+
+* The phantom is generated from exactly the geometry the method assumes (straight thin tubes), so this is a check of the
+  mechanism, not a validation. Curved or tapering tubes, non-circular cross-sections and noisy footprints are not tested.
+* **Real data show no evidence either way yet.** On the MICrONS triplet (`examples/scan_hard_cases.py`), at the real 40 nm gap
+  only 0 and 1 of about 100 labels lack any overlap between sections, there are 84 and 101 non-overlapping same-label
+  component pairs (mostly unrelated pieces of multi-component cells), and **no tube link is accepted**; across the 80 nm gap
+  the guard also changes nothing, so every output is identical to the baseline. Elongation alone is not a specific signal on
+  real data: 98-104 footprints per section have slope ≥ 1 and are ellipse-like by the loose test, because ordinary irregular
+  cells are elongated. The closure and continuation tests are what keep the method from firing there.
+* The situation (a thin neurite whose footprints do not overlap across the gap) may be rare at the 40 nm gap in cortex, or
+  mostly occur in other tiles. Its prevalence in a larger MICrONS sample, and held-out evidence on real instances, are what
+  would be needed to support a claim beyond the phantom.
 
 ## 9. Known limitations and open questions
 
@@ -303,8 +372,9 @@ What it shows:
   frames of known provenance.
 * **Label-level translation is one rigid shift per label**, and its benefit is inconsistent on real data; component-level
   translation is only tested on the split phantom and produces spurious fragments there.
-* **Non-overlapping thin structures are not handled** (section 8): signed-distance interpolation deletes them in the gap
-  unless the persistence guard is on, and then they are only as good as repeating the nearest section.
+* **Non-overlapping thin structures** (section 8): signed-distance interpolation deletes them in the gap unless the persistence
+  guard is on. Tube links (`tube=True`) recover straight thin tubes whose footprints are resolved ellipses, only validated on
+  the phantom; unresolved forks, curved tubes and real data are open.
 * **Smoothing** rounds sharp corners (about 0.02% of pixels on clean phantom sections) and will thin features narrower
   than about 2σ. σ between 0.5 and 2 px made little difference on the real example.
 * **Absent-label depth** (`absent`) is a free parameter; the phantom sweep was insensitive to it, but it controls

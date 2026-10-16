@@ -69,7 +69,8 @@ rows = {"ground truth": gt,
         "heat-paths port (raw, no filter)": reconstruct(secs, 5, "heat"),
         "proposed (linear)": reconstruct(secs, 5, "sdf"),
         "proposed + component translation": reconstruct(secs, 5, "sdf", align="component", maxshift=40),
-        "proposed + persistence guard": reconstruct(secs, 5, "sdf", persist=True)}
+        "proposed + persistence guard": reconstruct(secs, 5, "sdf", persist=True),
+        "proposed + tube links + guard": reconstruct(secs, 5, "sdf", tube=True, persist=True)}
 zs = (15, 16, 17, 18, 19, 20)
 fig, ax = plt.subplots(len(rows), len(zs), figsize=(2.9 * len(zs), 1.35 * len(rows)))
 for r, (n, v) in enumerate(rows.items()):

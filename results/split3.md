@@ -16,6 +16,8 @@ Ground-truth components of the neurite in slices 16-19: [1, 1, 1, 3] (sections 1
 | proposed + label translation | 0.128 | 0.834 | 1.64 | [1, 1, 1, 1] |
 | proposed + component translation | 0.294 | 0.855 | 0.78 | [1, 3, 3, 7] |
 | proposed + persistence guard | 0.580 | 0.911 | 0.50 | [1, 1, 3, 3] |
+| proposed + tube links | 0.927 | 0.978 | 0.12 | [1, 1, 3, 3] |
+| proposed + tube links + persistence guard | 0.927 | 0.978 | 0.12 | [1, 1, 3, 3] |
 | component translation + persistence guard | 0.483 | 0.907 | 0.47 | [1, 1, 3, 7] |
 
 ### noisy sections
@@ -33,6 +35,8 @@ Ground-truth components of the neurite in slices 16-19: [1, 1, 1, 3] (sections 1
 | proposed + label translation | 0.000 | 0.813 | 2.71 |  |
 | proposed + component translation | 0.173 | 0.830 | 1.29 |  |
 | proposed + persistence guard | 0.568 | 0.897 | 0.60 |  |
+| proposed + tube links | 0.888 | 0.946 | 0.53 |  |
+| proposed + tube links + persistence guard | 0.888 | 0.948 | 0.31 |  |
 | component translation + persistence guard | 0.559 | 0.898 | 0.57 |  |
 
 ### How each method carries the neurite through the gap (clean sections): neurite pixels / components per slice
@@ -51,4 +55,6 @@ Ground-truth components of the neurite in slices 16-19: [1, 1, 1, 3] (sections 1
 | proposed + label translation | 111 / 1 | 35 / 1 | 5 / 1 | 4 / 1 | 28 / 1 | 295 / 3 |
 | proposed + component translation | 111 / 1 | 85 / 1 | 25 / 3 | 14 / 3 | 60 / 7 | 295 / 3 |
 | proposed + persistence guard | 111 / 1 | 111 / 1 | 111 / 1 | 295 / 3 | 295 / 3 | 295 / 3 |
+| proposed + tube links | 111 / 1 | 234 / 1 | 261 / 1 | 293 / 3 | 276 / 3 | 295 / 3 |
+| proposed + tube links + persistence guard | 111 / 1 | 234 / 1 | 261 / 1 | 293 / 3 | 276 / 3 | 295 / 3 |
 | component translation + persistence guard | 111 / 1 | 85 / 1 | 133 / 1 | 303 / 3 | 60 / 7 | 295 / 3 |

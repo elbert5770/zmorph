@@ -120,6 +120,28 @@
    3
   ]
  },
+ "clean|proposed + tube links": {
+  "gap_dice": 0.9267831837505904,
+  "dice_mid": 0.9783109966644125,
+  "bdist": 0.11668956406219573,
+  "comps": [
+   1,
+   1,
+   3,
+   3
+  ]
+ },
+ "clean|proposed + tube links + persistence guard": {
+  "gap_dice": 0.9267831837505904,
+  "dice_mid": 0.9783109966644125,
+  "bdist": 0.11668956406219573,
+  "comps": [
+   1,
+   1,
+   3,
+   3
+  ]
+ },
  "clean|component translation + persistence guard": {
   "gap_dice": 0.4834761321909425,
   "dice_mid": 0.9071161791928415,
@@ -195,6 +217,18 @@
   "gap_dice": 0.5681158985134717,
   "dice_mid": 0.8966431633069973,
   "bdist": 0.599393808782761,
+  "comps": null
+ },
+ "noisy|proposed + tube links": {
+  "gap_dice": 0.8876265564980237,
+  "dice_mid": 0.9461697260068848,
+  "bdist": 0.5337978016975107,
+  "comps": null
+ },
+ "noisy|proposed + tube links + persistence guard": {
+  "gap_dice": 0.8876265564980237,
+  "dice_mid": 0.9476602852828055,
+  "bdist": 0.30520312411201866,
   "comps": null
  },
  "noisy|component translation + persistence guard": {
@@ -483,6 +517,58 @@
    ],
    [
     295,
+    3
+   ],
+   [
+    295,
+    3
+   ]
+  ],
+  "proposed + tube links": [
+   [
+    111,
+    1
+   ],
+   [
+    234,
+    1
+   ],
+   [
+    261,
+    1
+   ],
+   [
+    293,
+    3
+   ],
+   [
+    276,
+    3
+   ],
+   [
+    295,
+    3
+   ]
+  ],
+  "proposed + tube links + persistence guard": [
+   [
+    111,
+    1
+   ],
+   [
+    234,
+    1
+   ],
+   [
+    261,
+    1
+   ],
+   [
+    293,
+    3
+   ],
+   [
+    276,
     3
    ],
    [

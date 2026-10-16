@@ -20,6 +20,8 @@ METHODS = {
     "proposed + label translation":           ("sdf", dict(align=True, **SH), False),
     "proposed + component translation":       ("sdf", dict(align="component", **SH), False),
     "proposed + persistence guard":           ("sdf", dict(persist=True), False),
+    "proposed + tube links":                  ("sdf", dict(tube=True), False),
+    "proposed + tube links + persistence guard": ("sdf", dict(tube=True, persist=True), False),
     "component translation + persistence guard": ("sdf", dict(align="component", persist=True, **SH), False),
 }
 
