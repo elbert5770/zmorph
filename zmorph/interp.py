@@ -302,6 +302,9 @@ def _pair_fields(s0, s1, ts, kind, p):
             else:
                 a, b = f0, f1
             out.append((1 - t) * a + t * b)
+        if p.get("prior_vol") is not None:     # fuse with the SDF of a prior segmentation (e.g. heat2) of the same slice
+            w = p["prior_w"]
+            out = [(1 - w) * o + w * _field(p["prior_vol"][z] == k, p) for o, z in zip(out, p["_zidx"])]
         yield k, out
 
 
@@ -316,7 +319,10 @@ def _persist(s0, s1, ts, zs, best, second, lab, fields, p):
         need = p["persist_frac"] * min(m0.sum(), m1.sum())
         for ti, t in enumerate(ts):
             if 0 < t < 1 and (lab[ti] == k).sum() < need:
-                src = m0 if t < 0.5 else m1
+                pv = p.get("persist_vol")
+                src = (pv[zs[ti]] == k) if pv is not None else (m0 if t < 0.5 else m1)
+                if not src.any():
+                    src = m0 if t < 0.5 else m1
                 f = _field(src, p)
                 inside = f > 0
                 top = np.maximum(best[ti], 0) + 24.0
@@ -333,7 +339,7 @@ def competition(sections, factor=5, kind="sdf", return_fields=False, **kw):
     (the latter two are what the conforming mesher needs)."""
     p = dict(sigma=1.0, absent=4.0, cap=12.0, subvoxel=True, align=False, iou_gate=1.01, L=float(factor),
              maxshift=24, min_iou=0.05, max_pairs=64, neg_cap=None,
-             persist=False, persist_frac=0.5,
+             persist=False, persist_frac=0.5, persist_vol=None, prior_vol=None, prior_w=0.5,
              tube=False, tube_tol=3.0, tube_min_area=12, tube_min_slope=1.0,
              tube_min_ellipse=0.6, tube_min_continue=0.3)
     p.update(kw)
@@ -349,6 +355,7 @@ def competition(sections, factor=5, kind="sdf", return_fields=False, **kw):
         ts = [j / factor for j in range(factor + (1 if last else 0))]
         zs = [s * factor + j for j in range(len(ts))]
         b, sec, l = best[zs], second[zs], lab[zs]
+        p["_zidx"] = zs
         for k, fl in _pair_fields(sections[s], sections[s + 1], ts, kind, p):
             for ti, f in enumerate(fl):
                 _argmax_update(b, sec, l, f, k, ti)

@@ -113,33 +113,46 @@ def _arrivals(m0, m1, mode, layer_z, L, max_iter, grad, sink, stencil):
     return start, r
 
 
+def heat_tstar(s0, s1, factor=5, grad="all", sink="own", stencil=2, max_iter=2000, layer_z=6.5, L=25.0,
+               arrival="paths", symmetric=False):
+    """Switch time t* in [0, 1] of every pixel at which the two sections differ (NaN elsewhere): the pixel
+    carries the lower label for t < t* and the upper label for t >= t*."""
+    ny, nx = s0.shape
+    tf = np.full((ny, nx), np.nan)            # forward arrival of the upper label
+    tr = np.full((ny, nx), np.nan)            # reverse estimate: time at which the lower label leaves
+    for k in np.union1d(np.unique(s0), np.unique(s1)):
+        st, arr = _arrivals(s0 == k, s1 == k, arrival, layer_z, L, max_iter, grad, sink, stencil)
+        if len(st):
+            tf[st[:, 0], st[:, 1]] = arr
+        if symmetric:
+            st, arr = _arrivals(s1 == k, s0 == k, arrival, layer_z, L, max_iter, grad, sink, stencil)
+            if len(st):
+                tr[st[:, 0], st[:, 1]] = 1.0 - arr
+    return np.where(np.isnan(tf), tr, np.where(np.isnan(tr), tf, 0.5 * (tf + tr))) if symmetric else tf
+
+
+def render_tstar(sections, tstars, factor):
+    """Build the label volume from per-pair switch-time maps."""
+    S = len(sections)
+    ny, nx = sections[0].shape
+    vol = np.zeros(((S - 1) * factor + 1, ny, nx), sections[0].dtype)
+    for s in range(S):
+        vol[s * factor] = sections[s]
+    for s in range(S - 1):
+        s0, s1, ts_ = sections[s], sections[s + 1], tstars[s]
+        for j in range(1, factor):
+            t = j / factor
+            sw = (s0 != s1) & ~np.isnan(ts_) & (t >= ts_ - 1e-9)
+            vol[s * factor + j] = np.where(sw, s1, s0)
+    return vol
+
+
 def heat_path_morph(sections, factor=5, grad="all", sink="own", stencil=2, max_iter=2000, layer_z=6.5, L=25.0,
                     arrival="paths", symmetric=False):
     """Defaults reproduce the published algorithm. `arrival` selects how the arrival fraction is computed
     (see `_arrivals`). With `symmetric=True` a reverse pass (upper section to lower) is run as well: the
     lower label leaves a pixel at time 1 - (its reverse arrival), and the pixel switches at the mean of the
     two estimates, which makes the result independent of the direction of z."""
-    S = len(sections)
-    ny, nx = sections[0].shape
-    nz = (S - 1) * factor + 1
-    vol = np.zeros((nz, ny, nx), sections[0].dtype)
-    for s in range(S):
-        vol[s * factor] = sections[s]
-    for s in range(S - 1):
-        s0, s1 = sections[s], sections[s + 1]
-        tf = np.full((ny, nx), np.nan)            # forward arrival of the upper label
-        tr = np.full((ny, nx), np.nan)            # reverse estimate: time at which the lower label leaves
-        for k in np.union1d(np.unique(s0), np.unique(s1)):
-            st, arr = _arrivals(s0 == k, s1 == k, arrival, layer_z, L, max_iter, grad, sink, stencil)
-            if len(st):
-                tf[st[:, 0], st[:, 1]] = arr
-            if symmetric:
-                st, arr = _arrivals(s1 == k, s0 == k, arrival, layer_z, L, max_iter, grad, sink, stencil)
-                if len(st):
-                    tr[st[:, 0], st[:, 1]] = 1.0 - arr
-        tstar = np.where(np.isnan(tf), tr, np.where(np.isnan(tr), tf, 0.5 * (tf + tr))) if symmetric else tf
-        for j in range(1, factor):
-            t = j / factor
-            sw = (s0 != s1) & ~np.isnan(tstar) & (t >= tstar - 1e-9)
-            vol[s * factor + j] = np.where(sw, s1, s0)
-    return vol
+    ts = [heat_tstar(sections[s], sections[s + 1], factor, grad, sink, stencil, max_iter, layer_z, L, arrival, symmetric)
+          for s in range(len(sections) - 1)]
+    return render_tstar(sections, ts, factor)
