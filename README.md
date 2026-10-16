@@ -88,6 +88,16 @@ it is **not uniformly better**. Higher-order interpolation from four or more sec
 thin tilted neurites (Dice 0.947 vs 0.883) and worse under noise. On the real sections the proposed field construction
 changes accuracy by less than 0.3 points compared with the textbook linear SDF; the translation step adds 0.24 points.
 
+### Improving the heat method (`docs/METHOD.md` §9, `results/heat_study.md`)
+
+The paper's observation layer 7 is not badly chosen (real-data accuracy is flat for z=2.5-9.5, best at 4.5, +0.15 points).
+Larger gains come from structure: a **time-symmetric** assignment (exactly independent of the direction of z, 0 voxels differ
+against 8,936 for the published algorithm) and ranking pixels by **layer temperature** instead of tracing paths, with the layer
+near the source face. `method="heat2"` reaches 0.934 / 0.936 accuracy on the real held-out section (published heat: 0.917 /
+0.916; SDF: 0.940 / 0.943), beats the SDF method with translation on the tilted phantom (Dice 0.961 vs 0.938) and does not
+delete the thin neurite in the split scene (0.665). Source slices are exact in all heat variants. §9.4 discusses (without
+having tested) whether a diffusion model could help.
+
 ### Stress test: a thin neurite splitting into three non-overlapping branches (`docs/METHOD.md` §8)
 
 `phantom.scene_split3`, images in `results/split3_scene.png` and `results/split3_methods.png` (tilted neurites:
@@ -142,7 +152,7 @@ heat-paths + majority 0.921, harmonic 0.934, classic SDF 0.944, sdf σ=1 0.943, 
 * The translation is one rigid shift per label: it does not handle a label whose parts move in different
   directions.
 * Possible artefact: thin, shifting structures may bulge in the middle frames under linear SDF interpolation (seen in
-  an exploratory check not included here; see `docs/METHOD.md`, section 9).
+  an exploratory check not included here; see `docs/METHOD.md`, section 10).
 * Not implemented: tiling with halos / bounding-box cropping for very large volumes, use of raw EM intensities
   as an edge prior.
 

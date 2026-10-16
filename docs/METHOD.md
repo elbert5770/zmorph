@@ -94,6 +94,7 @@ conformity is preserved by construction. Measured effect is in `results/mesh.md`
 | `sdf` | the proposed method of section 2 (`align=True` adds section 3) |
 | `harmonic` | per label, the steady-state heat (harmonic) field between the two sections, with lateral no-flux boundaries, solved in closed form with a 2-D DCT (continuous in z over a gap `L`, default `factor`), then argmax. This is the same kind of field the manuscript uses, without path tracing. Note it cannot reproduce two identical sections exactly: lateral modes decay toward the mid-plane, so thin features blur |
 | `sdf0_cubic`, `sdf0_4pt`, `sdf_cubic`, `sdf_4pt` | higher-order interpolation of the per-label SDFs in z from several sections (natural cubic spline through all sections, or 4-point cubic from the four nearest), with textbook (`sdf0_*`) or proposed (`sdf_*`) fields; see section 7 |
+| `heat2` | the improved heat method of section 9: temperature-rank arrival, time-symmetric, observation layer z = 2 |
 | `heat` | port of the published algorithm (Elbert, bioRxiv 2025.04.11.648268): per-cell 3-D heat solve with 25 layers and observation layer 7, gradient ascent from pixels unique to the upper section until the nearest pixel is in the overlap, path lengths normalised by the longest path per terminal pixel, assignment in frame `j` if `ceil(5·fraction) ≤ j` |
 
 Differences between `heat` and the published implementation: the 3-D solve is done in closed form (DCT) instead of
@@ -364,7 +365,133 @@ Neurite Dice in the gap slices 16-19 (clean sections / mean of seeds with bounda
   mostly occur in other tiles. Its prevalence in a larger MICrONS sample, and held-out evidence on real instances, are what
   would be needed to support a claim beyond the phantom.
 
-## 9. Known limitations and open questions
+## 9. Improving the heat method
+
+The published heat method (section 5) has three design choices that were never tested systematically: the observation layer
+(layer 7, i.e. 6.5 px from the source face in a 25-layer stack), the normalisation of path lengths by the longest path
+ending at the same terminal pixel, and the one-directional assignment (only pixels unique to the upper section are
+re-assigned, so the lower section's retreat never enters). `heat_path_morph` now exposes all three (`layer_z`, `arrival`,
+`symmetric`); the defaults reproduce the published algorithm exactly (0 voxels differ from a saved baseline on three
+phantoms). `run_heat_study.py` produced all tables in this section (`results/heat_study.md`, no post-filter anywhere; "bd" is the
+mean interface distance in px; noisy = mean of 3 seeds).
+
+**Source slices.** In every variant the source slices are boundary conditions and are reproduced exactly (tested). The
+heat field itself has Dirichlet values on the faces, and the morphed frames are built from the section masks, so no
+shrinkage of the sources can come from the method. The shrinkage seen in `szframe_*` comes from the 3-D mode filter that is
+applied afterwards to the whole stack (a plain majority filter changes 1.5% of the source-slice pixels of the real pair and
+shrinks thin cells; pinning the sources through the filter avoids it at no cost in the interpolated frames).
+
+### 9.1 The observation layer
+
+| variant | arch Dice / bd | tilted Dice / bd | arch noisy Dice / bd (seeds) | split3 gap Dice | real smoothed acc / bd / Dice | real raw acc / bd / Dice |
+|---|---|---|---|---|---|---|
+| z=0.5 | 0.940 / 0.59 | 0.877 / 0.85 | 0.920 / 0.88 | 0.447 | 0.8897 / 2.37 / 0.842 | 0.8911 / 2.30 / 0.844 |
+| z=1.5 | 0.949 / 0.51 | 0.891 / 0.83 | 0.929 / 0.81 | 0.501 | 0.9089 / 1.98 / 0.872 | 0.9091 / 1.89 / 0.873 |
+| z=2.5 | 0.959 / 0.40 | 0.905 / 0.81 | 0.938 / 0.73 | 0.574 | 0.9157 / 1.80 / 0.881 | 0.9163 / 1.76 / 0.882 |
+| z=4.5 | 0.964 / 0.35 | 0.910 / 0.77 | 0.942 / 0.69 | 0.661 | 0.9181 / 1.77 / 0.883 | 0.9178 / 1.73 / 0.883 |
+| z=6.5 | 0.964 / 0.36 | 0.914 / 0.66 | 0.942 / 0.69 | 0.628 | 0.9166 / 1.75 / 0.881 | 0.9160 / 1.70 / 0.881 |
+| z=9.5 | 0.965 / 0.34 | 0.928 / 0.53 | 0.944 / 0.69 | 0.666 | 0.9157 / 1.74 / 0.880 | 0.9151 / 1.71 / 0.878 |
+| z=12.5 | 0.964 / 0.35 | 0.932 / 0.51 | 0.943 / 0.69 | 0.453 | 0.9136 / 1.78 / 0.876 | 0.9119 / 1.75 / 0.872 |
+| z=16.5 | 0.964 / 0.35 | 0.933 / 0.50 | 0.943 / 0.69 | 0.573 | 0.9096 / 1.89 / 0.869 | 0.9078 / 1.85 / 0.864 |
+| z=24.5 | 0.955 / 0.42 | 0.931 / 0.52 | 0.938 / 0.73 | 0.521 | 0.9014 / 1.96 / 0.859 | 0.8977 / 1.95 / 0.849 |
+
+* On real sections accuracy is flat for z = 2.5-9.5 (0.9157-0.9181) and peaks at z = 4.5, **0.15 points above the paper's 6.5**;
+  it falls off close to the source face (0.890 at z = 0.5) and far from it (0.901 at z = 24.5). Layer 7 is not badly chosen.
+* The best layer depends on the data: the tilted neurites keep improving out to z of about 12-20 (Dice 0.914 -> 0.933), the
+  arch is flat from 4.5 to 16.5, and the split-scene gap Dice swings between 0.45 and 0.67 with no clear trend.
+* Why a single layer is a compromise: near a Dirichlet face the harmonic field is a smoothed copy of the mask (a Poisson
+  kernel whose width grows with the height z), so a high layer blurs thin features and a low layer cannot reach far
+  displacements. The ordering of pixels by layer temperature agrees with their ordering by distance to the overlap region
+  with Spearman correlation 0.87 at z = 0.5-1.5, 0.79 at z = 6.5, 0.61 at z = 12.5 and 0.47 at z = 16.5 (12 largest cells of the
+  real 17414 -> 17416 pair).
+
+### 9.2 Arrival definition and time symmetry
+
+| variant | arch Dice / bd | tilted Dice / bd | arch noisy Dice / bd (seeds) | split3 gap Dice | real smoothed acc / bd / Dice | real raw acc / bd / Dice |
+|---|---|---|---|---|---|---|
+| paths | 0.964 / 0.36 | 0.914 / 0.66 | 0.942 / 0.69 | 0.628 | 0.9166 / 1.75 / 0.881 | 0.9160 / 1.70 / 0.881 |
+| paths + symmetric | 0.975 / 0.24 | 0.915 / 0.57 | 0.949 / 0.59 | 0.597 | 0.9258 / 1.53 / 0.895 | 0.9252 / 1.48 / 0.894 |
+| paths_global | 0.966 / 0.38 | 0.901 / 0.61 | 0.939 / 0.69 | 0.587 | 0.8927 / 2.22 / 0.846 | 0.8887 / 2.20 / 0.839 |
+| paths_global + symmetric | 0.973 / 0.28 | 0.931 / 0.43 | 0.947 / 0.61 | 0.494 | 0.9261 / 1.74 / 0.892 | 0.9267 / 1.66 / 0.891 |
+| rank | 0.970 / 0.30 | 0.911 / 0.62 | 0.946 / 0.60 | 0.666 | 0.9150 / 1.84 / 0.884 | 0.9161 / 1.73 / 0.886 |
+| rank + symmetric | 0.976 / 0.23 | 0.937 / 0.41 | 0.952 / 0.57 | 0.684 | 0.9334 / 1.54 / 0.908 | 0.9348 / 1.47 / 0.909 |
+| T | 0.970 / 0.33 | 0.914 / 0.58 | 0.945 / 0.52 | 0.613 | 0.8995 / 1.99 / 0.862 | 0.8993 / 1.95 / 0.864 |
+| T + symmetric | 0.970 / 0.29 | 0.954 / 0.30 | 0.946 / 0.48 | 0.625 | 0.9282 / 1.50 / 0.902 | 0.9285 / 1.46 / 0.902 |
+| Trank | 0.971 / 0.32 | 0.947 / 0.34 | 0.955 / 0.45 | 0.642 | 0.9152 / 1.71 / 0.881 | 0.9167 / 1.64 / 0.882 |
+| Trank + symmetric | 0.973 / 0.27 | 0.965 / 0.23 | 0.956 / 0.42 | 0.646 | 0.9300 / 1.49 / 0.905 | 0.9315 / 1.43 / 0.906 |
+
+`arrival` is how the arrival fraction of the upper label at a pixel is computed: `paths` (published), `paths_global` (path
+length over the longest path of the cell), `rank` (area rank of the path length: equal-area progress), `T` (1 - T/Tmax of the
+layer temperature, no path tracing) and `Trank` (area rank of the temperature, hottest first, no path tracing).
+`symmetric=True` adds a reverse pass: the lower label leaves a pixel at time 1 minus its reverse arrival, and a pixel
+switches at the mean of the two estimates.
+
+* **Time symmetry is the most consistent gain.** It improves every arrival definition on the real sections (for example
+  paths 0.9166 -> 0.9258, rank 0.9150 -> 0.9334, Trank 0.9152 -> 0.9300) and on the arch, and it makes the result exactly
+  independent of the direction of z: 0 of 380,928 voxels differ when the stack is reversed, against 8,936 for the
+  published algorithm (tested).
+* **Replacing the per-terminal-pixel normalisation by a rank helps.** The per-terminal normalisation gives many singleton
+  groups whose fraction is 1 (late switching); `paths_global`, which needs a cell-wide maximum, is worse on real data
+  (0.8927) unless symmetric.
+* **Path tracing is not needed.** The temperature-rank variants use only the 3-D heat solve, are the best on the
+  tilted phantom (Dice 0.965, bd 0.23) and competitive on real data.
+* **With symmetry and temperature rank the best layer moves down:** z = 1.5-2.5 gives the best real-data interface distance
+  (1.40 / 1.33 px smoothed / raw) and arch Dice 0.979-0.982 (bd 0.17-0.18, equal to the SDF method), consistent with the
+  smoothing argument above; see `results/heat_study.md` for the layer sweeps of `rank + symmetric` and `Trank + symmetric`.
+  A scale-space ensemble (`layer_z=[1.5, 4.5]`) improves the tilted phantom (0.961 -> 0.968) at a small cost on real data
+  (0.9336 -> 0.9330, both against the single layer z = 2); a single layer was kept.
+
+### 9.3 The improved method (`method="heat2"`) against the alternatives
+
+`heat2` = `arrival="Trank"`, `symmetric=True`, `layer_z=2.0`.
+
+| variant | arch Dice / bd | tilted Dice / bd | arch noisy Dice / bd (seeds) | split3 gap Dice | real smoothed acc / bd / Dice | real raw acc / bd / Dice |
+|---|---|---|---|---|---|---|
+| nearest (repeat) | 0.962 / 0.40 | 0.880 / 0.81 | 0.936 / 0.74 | 0.590 | 0.8368 / 3.46 / 0.761 | 0.8372 / 3.39 / 0.762 |
+| heat, published (paths, z=6.5) | 0.964 / 0.36 | 0.914 / 0.66 | 0.942 / 0.69 | 0.628 | 0.9166 / 1.75 / 0.881 | 0.9160 / 1.70 / 0.881 |
+| heat2 (Trank + symmetric, z=2) | 0.980 / 0.18 | 0.961 / 0.26 | 0.964 / 0.33 | 0.665 | 0.9336 / 1.40 / 0.909 | 0.9355 / 1.34 / 0.911 |
+| sdf (proposed) | 0.983 / 0.18 | 0.883 / 0.71 | 0.971 / 0.29 | 0.000 | 0.9396 / 1.30 / 0.914 | 0.9432 / 1.20 / 0.918 |
+| sdf + translation | 0.983 / 0.18 | 0.938 / 0.39 | 0.971 / 0.29 | 0.121 | 0.9420 / 1.27 / 0.922 | 0.9456 / 1.18 / 0.925 |
+
+* **On real sections `heat2` closes about three quarters of the gap between the published heat method and the SDF method**
+  (smoothed accuracy 0.9166 -> 0.9336, against 0.9396 for sdf and 0.9420 with translation; raw 0.9160 -> 0.9355, against 0.9432
+  and 0.9456) and has better interface distance (1.40 against 1.75 px, SDF 1.30).
+* **It beats the SDF method with translation on the tilted phantom** (Dice 0.961 against 0.938, bd 0.26 against 0.39) and
+  **does not delete the thin neurite in the split scene** (gap Dice 0.665; the SDF method scores 0.000 and even nearest 0.590).
+  It re-assigns pixels between labels that exist in both sections and never blends distance fields, so a label cannot vanish.
+* It is still below the tube links on that scene (0.927, section 8) and below the SDF method on the arch under noise
+  (0.964 against 0.971).
+* These are single-phantom and single-triplet results (3 noise seeds); the differences on real data are a few tenths of a point.
+
+### 9.4 Could a diffusion model (such as Stable Diffusion) help?
+
+This is a discussion, not a tested result: nothing here was run with a diffusion model (no GPU or model weights in this
+environment). The heat method guides the interpolation with a hand-designed rule; the question is whether a learned prior would do
+better where the rule fails, mainly for thin tubes that do not overlap across the gap (section 8).
+
+* **Where a learned model could help.** It would learn from data how real neurites move and branch between sections (tilted
+  thin tubes, spine necks, forks that tube links cannot resolve), use the raw EM membrane evidence that every method here
+  ignores, and, being generative, give several plausible intermediate sections and an uncertainty map. The training data are
+  abundant and free of annotation: any three consecutive sections give the middle one as the target (the held-out protocol of
+  this repository), and the MICrONS volume has millions.
+* **Why off-the-shelf Stable Diffusion would not work.** It is a latent model trained on natural photographs with an 8x
+  down-sampling autoencoder: a 4-5 px wide neurite does not survive that latent, label maps with arbitrary 18-digit IDs are not
+  images, and it knows nothing about EM. It would need a pixel-space or high-resolution conditional diffusion model, trained
+  from scratch or fine-tuned (conditioning on the two neighbouring sections and, if available, their EM, for example through
+  a ControlNet-style branch).
+* **Keeping the partition.** Predict, for every pixel, which of the K labels present in the two sections (plus background) owns
+  it, and take the arg-max; that keeps every guarantee of this repository (a partition, exact sources, no invented IDs).
+  A generative model can still invent or delete small structures, so it would need the same held-out evaluation and the
+  persistence guard.
+* **A natural way to combine it with the heat method** is to give the model the heat field (several layers, or the
+  `Trank + symmetric` arrival map) as a conditioning input, so that the physics supplies the geometry and the network
+  corrects it, or to train a small network that predicts the arrival-time map instead of using a fixed layer and rank rule.
+* **Whether it is worth it is an open measurement.** In the one real tile scanned here the hard case (a label with no
+  overlap across the gap) is rare (0-1 of about 100 labels) and the tube test never fires, so the training signal for exactly
+  the failure case is scarce. The cheapest first step is a small supervised network on triplets with no diffusion at all;
+  diffusion is justified only if the mid-gap position is genuinely multi-modal and samples or uncertainty are needed.
+
+## 10. Known limitations and open questions
 
 * **Thin, shifting structures can bulge in the middle frames** under linear interpolation of distance fields: in an
   exploratory frame-by-frame area check (not included in this repository), a thin diagonal band grew about 3% above its
