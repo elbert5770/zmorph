@@ -103,3 +103,32 @@ def corrupt(sections, rng, p_flip=0.35, rounds=2, n_iso=12, bad=None):
                 s[y:y + 5, x:x + 5] = rng.choice(np.unique(s[max(0, y - 8):y + 9, max(0, x - 8):x + 9]))
         out.append(s)
     return out
+
+
+def scene_split3(nz=26):
+    """A thin neurite (label 1, about 4-5 px wide) runs tilted through sections 0-15 (about 15 px per
+    section gap), then splits just above section 15 into three daughters that leave steeply in different
+    directions (+x, and +x with +y / -y). Sections 20 and 25 show three components each, and none of them
+    overlaps the neurite's footprint in section 15 (asserted in the tests). Label 0 is the remaining space
+    and cells 2-5 are large vertical fillers, so every voxel carries a label.
+
+    Geometry note: a straight tube of radius r overlaps its own footprint in the next section unless
+    r < 2.5 px (the cross-section is stretched along the direction of motion), so the neurite must be thin,
+    and the margin `bg` has to be small because it stretches footprints by bg*sqrt(1+speed^2)."""
+    ny, nx = 96, 160
+    J = (15.5, 48.0, 58.0)                       # junction (z, y, x), just above section 15
+    def far(dy, dx, z=25.0):                      # point on a daughter at height z
+        k = z - J[0]
+        return (z, J[1] + dy * k, J[2] + dx * k)
+    r = 2.0
+    cells = [
+        [((0, 48, 13), J, r, r),                  # parent, about 3 px per z
+         (J, far(0.0, 6.0), r, r),                # D1: along +x, 6 px per z
+         (J, far(4.0, 4.5), r, r),                # D2: +y and +x
+         (J, far(-4.0, 4.5), r, r)],              # D3: -y and +x
+        [((0, 15, 25), (25, 15, 28), 9.0, 9.0)],  # fillers
+        [((0, 80, 30), (25, 80, 34), 9.0, 9.0)],
+        [((0, 12, 120), (25, 14, 124), 9.0, 9.0)],
+        [((0, 82, 125), (25, 80, 128), 9.0, 9.0)],
+    ]
+    return build(cells, (nz, ny, nx), bg=0.3)

@@ -82,6 +82,59 @@ def _estimate_shift(m0, m1, maxshift=24, min_gain=0.2, iou_gate=0.3):
     return d if iou1 > iou0 + min_gain else np.zeros(2)
 
 
+
+def _components(mask):
+    cc, n = ndi.label(mask)
+    return [cc == i for i in range(1, n + 1)]
+
+
+def _component_fields(m0, m1, fld, ts, p):
+    """Component-wise translation for splits and fusions. Every connected component of the label in one
+    section is paired with its best-overlapping component in the other section (after the best
+    translation, `_estimate_shift`); a component may be paired with several (split) or be the partner of
+    several (fusion). Unpaired components pair with 'nothing' (they appear or vanish). The label's field
+    is the maximum over pairs of the translated, interpolated pair field, so the competition and the
+    partition guarantee are unchanged. Returns None if there are too many pairs to evaluate."""
+    c0, c1 = _components(m0), _components(m1)
+    if len(c0) * len(c1) > p["max_pairs"]:
+        return None
+    iou = np.zeros((len(c0), len(c1)))
+    shift = {}
+    for i, a in enumerate(c0):
+        for j, b in enumerate(c1):
+            d = _estimate_shift(a, b, maxshift=p["maxshift"], iou_gate=1.01)
+            sh = ndi.shift(a.astype(float), d, order=0) > 0.5 if d.any() else a
+            iou[i, j] = (sh & b).sum() / max((sh | b).sum(), 1)
+            shift[i, j] = d
+    pairs = set()
+    for j in range(len(c1)):
+        i = int(np.argmax(iou[:, j]))
+        if iou[i, j] > p["min_iou"]:
+            pairs.add((i, j))
+    for i in range(len(c0)):
+        j = int(np.argmax(iou[i]))
+        if iou[i, j] > p["min_iou"]:
+            pairs.add((i, j))
+    pairs |= {(i, None) for i in range(len(c0)) if not any(q[0] == i for q in pairs)}
+    pairs |= {(None, j) for j in range(len(c1)) if not any(q[1] == j for q in pairs)}
+    f0 = [fld(a) for a in c0]
+    f1 = [fld(b) for b in c1]
+    gone = np.full(m0.shape, -min(p["absent"], p["neg_cap"] if p["neg_cap"] is not None else p["cap"]))
+    out = []
+    for t in ts:
+        best = None
+        for i, j in pairs:
+            a0 = f0[i] if i is not None else gone
+            a1 = f1[j] if j is not None else gone
+            d = shift.get((i, j), np.zeros(2))
+            if d.any():
+                a0 = ndi.shift(a0, t * d, order=1, mode="nearest")
+                a1 = ndi.shift(a1, -(1 - t) * d, order=1, mode="nearest")
+            v = (1 - t) * a0 + t * a1
+            best = v if best is None else np.maximum(best, v)
+        out.append(best)
+    return out
+
 # ----------------------------------------------------------------------------- pair kernels
 def _argmax_update(best, second, lab, val, k, ti):
     b = best[ti]
@@ -116,17 +169,30 @@ def _pair_fields(s0, s1, ts, kind, p):
 
     sigma, absent, cap = p["sigma"], p["absent"], p["cap"]
     sdf = sdf_subvoxel if p["subvoxel"] else sdf_binary
+    ncap = p["neg_cap"] if p["neg_cap"] is not None else cap
+
+    def fld(m):
+        f = sdf(m)
+        if sigma > 0:
+            f = ndi.gaussian_filter(f, sigma, mode="nearest")
+        return np.clip(f, -ncap, cap)
+
     for k in labels:
         m0, m1 = s0 == k, s1 == k
+        if p["align"] == "component" and m0.any() and m1.any():
+            res = _component_fields(m0, m1, fld, ts, p)
+            if res is not None:
+                yield k, res
+                continue
         f0 = sdf(m0) if m0.any() else np.full(m0.shape, -absent)
         f1 = sdf(m1) if m1.any() else np.full(m1.shape, -absent)
         if sigma > 0:
             f0 = ndi.gaussian_filter(f0, sigma, mode="nearest") if m0.any() else f0
             f1 = ndi.gaussian_filter(f1, sigma, mode="nearest") if m1.any() else f1
-        f0, f1 = np.clip(f0, -cap, cap), np.clip(f1, -cap, cap)
+        f0, f1 = np.clip(f0, -ncap, cap), np.clip(f1, -ncap, cap)
         d = np.zeros(2)
-        if p["align"] and m0.any() and m1.any():
-            d = _estimate_shift(m0, m1, iou_gate=p["iou_gate"])
+        if p["align"] and m0.any() and m1.any():     # True or "component" with too many pairs: label-level shift
+            d = _estimate_shift(m0, m1, maxshift=p["maxshift"], iou_gate=p["iou_gate"])
         out = []
         for t in ts:
             if d.any():
@@ -138,11 +204,35 @@ def _pair_fields(s0, s1, ts, kind, p):
         yield k, out
 
 
+def _persist(s0, s1, ts, zs, best, second, lab, fields, p):
+    """Persistence guard. A label present in both sections must not vanish between them: where its area in
+    an intermediate slice falls below `persist_frac` times the smaller of its two section areas, its
+    footprint from the nearer section is restored (it overrides the other labels there). Without this, a
+    thin structure that moves farther than its width is deleted in the gap (the signed-distance blend is
+    negative everywhere). It limits the damage to 'repeat the nearest section' for that label."""
+    for k in np.intersect1d(np.unique(s0), np.unique(s1)):
+        m0, m1 = s0 == k, s1 == k
+        need = p["persist_frac"] * min(m0.sum(), m1.sum())
+        for ti, t in enumerate(ts):
+            if 0 < t < 1 and (lab[ti] == k).sum() < need:
+                src = m0 if t < 0.5 else m1
+                f = _field(src, p)
+                inside = f > 0
+                top = np.maximum(best[ti], 0) + 24.0
+                second[ti] = np.where(inside & (lab[ti] != k), best[ti], np.where(inside, second[ti], second[ti]))
+                best[ti] = np.where(inside, top + f, best[ti])
+                lab[ti] = np.where(inside, k, lab[ti])
+                if fields is not None and k in fields:
+                    fields[k][zs[ti]] = np.where(inside, top + f, fields[k][zs[ti]])
+
+
 # ----------------------------------------------------------------------------- driver
 def competition(sections, factor=5, kind="sdf", return_fields=False, **kw):
     """Run the field interpolation and return label, best and second-best field values
     (the latter two are what the conforming mesher needs)."""
-    p = dict(sigma=1.0, absent=4.0, cap=12.0, subvoxel=True, align=False, iou_gate=1.01, L=float(factor))
+    p = dict(sigma=1.0, absent=4.0, cap=12.0, subvoxel=True, align=False, iou_gate=1.01, L=float(factor),
+             maxshift=24, min_iou=0.05, max_pairs=64, neg_cap=None,
+             persist=False, persist_frac=0.5)
     p.update(kw)
     S = len(sections)
     ny, nx = sections[0].shape
@@ -161,6 +251,8 @@ def competition(sections, factor=5, kind="sdf", return_fields=False, **kw):
                 _argmax_update(b, sec, l, f, k, ti)
                 if return_fields:
                     fields.setdefault(k, np.full((nz, ny, nx), -p["absent"], np.float32))[zs[ti]] = f
+        if p.get("persist") and kind == "sdf":
+            _persist(sections[s], sections[s + 1], ts, zs, b, sec, l, fields, p)
         best[zs], second[zs], lab[zs] = b, sec, l
     return (lab, best, second, fields) if return_fields else (lab, best, second)
 

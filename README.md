@@ -47,6 +47,9 @@ interfaces without explicit identification of object boundaries*, bioRxiv 2025.0
 
     python run_benchmark.py --seeds 5   # results/benchmark.md
     python run_sweeps.py                # results/sweeps.md   (shift, sigma/absent, noise level)
+    python run_published_comparison.py  # results/published_sdf.md (published SDF methods, ablations)
+    python run_split_experiment.py      # results/split3.md (neurite splitting into three branches)
+    python make_scene_figures.py        # results/tilted_scene.png, split3_scene.png, split3_methods.png
     python make_figures.py              # results/fig6_*.png  (Figure-6-style branching arch)
     python run_mesh_demo.py             # results/mesh.md, results/mesh_arch.png
     python examples/micron_17414_17416.py   # real-data example, results/micron_17414_17416.*
@@ -83,6 +86,15 @@ Raya & Udupa / Herman et al. (linear), higher-order (cubic-spline) SDF interpola
 it is **not uniformly better**. Higher-order interpolation from four or more sections is better on clean data and on
 thin tilted neurites (Dice 0.947 vs 0.883) and worse under noise. On the real sections the proposed field construction
 changes accuracy by less than 0.3 points compared with the textbook linear SDF; the translation step adds 0.24 points.
+
+### Stress test: a thin neurite splitting into three non-overlapping branches (`docs/METHOD.md` §8)
+
+`phantom.scene_split3`, images in `results/split3_scene.png` and `results/split3_methods.png` (tilted neurites:
+`results/tilted_scene.png`). No daughter overlaps the parent's section footprint. **All SDF-based methods delete the
+neurite in the gap** (the proposed method scores gap Dice 0.000, classic linear SDF 0.085), and no method beats repeating
+the nearest section (0.590). An optional persistence guard (`persist=True`) brings the proposed method to 0.580 and avoids
+cutting the neurite; component-wise translation (`align="component"`) reaches 0.294 with spurious fragments. Placing the
+branches correctly would need centreline-aware interpolation, which is not implemented.
 
 ## Real-data example: MICrONS sections 17414–17416
 
@@ -124,7 +136,7 @@ heat-paths + majority 0.921, harmonic 0.934, classic SDF 0.944, sdf σ=1 0.943, 
 * The translation is one rigid shift per label: it does not handle a label whose parts move in different
   directions.
 * Possible artefact: thin, shifting structures may bulge in the middle frames under linear SDF interpolation (seen in
-  an exploratory check not included here; see `docs/METHOD.md`, section 8).
+  an exploratory check not included here; see `docs/METHOD.md`, section 9).
 * Not implemented: tiling with halos / bounding-box cropping for very large volumes, use of raw EM intensities
   as an edge prior.
 

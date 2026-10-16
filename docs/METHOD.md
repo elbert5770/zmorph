@@ -35,6 +35,9 @@ For each pair of adjacent sections `(s0, s1)` and every label `k` present in eit
 
 Because every voxel is assigned to exactly one label, requirement 1 holds by construction.
 
+Two optional parameters address thin structures (section 8): `neg_cap` truncates the negative side of the field separately
+(default: same as `cap`), and `persist=True` restores a label that vanishes between two sections that both contain it.
+
 **Why topology changes work.** Take a pixel that carries label A in the lower section and B in the upper one, with
 `a` = depth inside A in the lower section and `b` = distance to A in the upper section. In the two-label case
 `f_A(t) = (1 − t)·a − t·b = −f_B(t)`, so the pixel switches from A to B at `t = a / (a + b)`: pixels near the
@@ -57,7 +60,13 @@ masks, and accepts it only if shifting raises the intersection-over-union by mor
 move toward each other: `f_k(t) = (1 − t)·shift(f_k(s0), t·d) + t·shift(f_k(s1), −(1 − t)·d)` (linear
 resampling). The competition is unchanged, so the result is still a partition.
 
-This is one rigid shift per label. It does not handle a label whose components move in different directions, and the
+`align="component"` does the same per connected component: each component of the label in one section is paired with its
+best-overlapping component in the other (after the best shift), a component may be paired with several (split) or be the
+partner of several (fusion), unpaired components appear or vanish, and the label's field is the maximum over pairs. Both
+modes search shifts within `maxshift` pixels (default 24). With too many pairs (`max_pairs`, 64) it falls back to the
+label-level shift.
+
+The label-level mode is one rigid shift per label. It does not handle a label whose components move in different directions, and the
 gain is not reliable: large on synthetic strongly tilted neurites, small (+0.2 points of accuracy) on the real
 example, so it is off by default.
 
@@ -205,13 +214,75 @@ interpolation and cannot be tested there. The ladder on the real triplet (`examp
   the competition formulation itself is a direct multi-label extension of Raya & Udupa.
 * The phantom's tubes are about 7-18 px wide, it has 7 sections, and the real example is one triplet from one tile.
 
-## 8. Known limitations and open questions
+## 8. Stress test: a thin neurite that splits into three non-overlapping branches
+
+`phantom.scene_split3` (figures: `results/split3_scene.png`, `results/split3_methods.png`; the plain tilted-neurite scene is
+in `results/tilted_scene.png`). One label, a single neurite, runs tilted (about 15 px per section gap) through sections
+0-15, splits just above section 15 into three daughters that leave steeply in different directions (+x, and +x with +y or
+-y; all at about 6 px per slice), and is seen as three components in sections 20 and 25. None of the three daughters
+overlaps the neurite's footprint in section 15 (asserted in the tests; the nearest is 2.8 px away). In the ground truth the
+neurite is a single component in slices 16-18 and three components from slice 19.
+
+Geometry notes. A straight tube of radius r overlaps its own footprint in the next section unless r < 2.5 px, because the
+cross-section is stretched along the direction of motion by sqrt(1 + speed^2). So the neurite must be thin (radius 2.0, label
+margin 0.3: about 4-5 px, roughly 35-40 nm at 8 nm pixels, at the thin end of real neurites), and the daughters leave
+steeply, which makes their section footprints long ellipses (30-40 px). It is an extreme case by construction.
+
+| method | neurite Dice in gap (clean) | (noisy, 5 seeds) | Dice, all cells, intermediate slices (clean) | interface dist (px, clean) | neurite components in slices 16-19 (clean) |
+|---|---|---|---|---|---|
+| nearest (repeat) | 0.590 | 0.571 | 0.908 | 0.54 | [1, 1, 3, 3] |
+| Raya-Udupa linear SDF | 0.085 | 0.053 | 0.816 | 1.69 | [6, 0, 0, 8] |
+| cubic-spline SDF (binary fields) | 0.462 | 0.429 | 0.892 | 0.54 | [1, 7, 5, 7] |
+| 4-point SDF (binary fields) | 0.361 | 0.330 | 0.897 | 0.49 | [1, 3, 3, 7] |
+| harmonic | 0.417 | 0.381 | 0.872 | 1.66 | [1, 1, 0, 3] |
+| heat-paths port + majority | 0.527 | 0.507 | 0.881 | 0.66 | [1, 1, 4, 4] |
+| proposed (linear) | 0.000 | 0.000 | 0.798 | 3.02 | [0, 0, 0, 0] |
+| proposed, negative side truncated at 2 | 0.052 | 0.024 | 0.813 | 2.32 | [1, 0, 0, 1] |
+| proposed + label translation | 0.128 | 0.000 | 0.834 | 1.64 | [1, 1, 1, 1] |
+| proposed + component translation | 0.294 | 0.173 | 0.855 | 0.78 | [1, 3, 3, 7] |
+| proposed + persistence guard | 0.580 | 0.568 | 0.911 | 0.50 | [1, 1, 3, 3] |
+| component translation + persistence guard | 0.483 | 0.559 | 0.907 | 0.47 | [1, 1, 3, 7] |
+
+(Sections 0-25, 6 sections; noisy = boundary jitter and isolated wrong pixels, no badly imputed section. The translation
+variants use a search window of 40 px.)
+
+What it shows:
+
+* **Nothing beats repeating the nearest section for this neurite** (Dice 0.590 in the gap). The best alternatives are the
+  persistence-guarded proposed method (0.580), the manuscript port with the majority filter (0.527) and the cubic-spline
+  SDF (0.462). These are single-scene results on a deliberately hard geometry.
+* **Signed-distance interpolation deletes the neurite in the gap.** With no overlap between the thin footprints, the
+  blend `(1-t)·f0 + t·f1` is negative everywhere, so the label has zero voxels in most intermediate slices
+  (Raya & Udupa: Dice 0.085; proposed: 0.000, components 0, 0, 0, 0 in slices 16-19). This is the known limitation of
+  shape-based interpolation for shapes that do not overlap. For meshing it is the worst outcome: the neurite would be
+  cut in two.
+* **Truncating the negative side** of the distance (`neg_cap`, as in truncated SDFs) is harmless on the other phantoms
+  (it slightly improves the tilted scene: Dice 0.883 -> 0.903 at `neg_cap=2`) but does not fix this case (0.052).
+* **A single translation per label** (`align=True`) cannot move one parent toward three daughters (0.128).
+  **Component-wise translation** (`align="component"`: pair each connected component with its best partner in the other
+  section, allowing one-to-many pairs for splits and many-to-one for fusions, field = maximum over pairs) gets the topology
+  order right (1, 3, 3 components) and a clearly better Dice (0.294), but it also creates spurious fragments (7 components
+  at slice 19) and needs a search window large enough for the displacement (40 px here, against a default of 24).
+* **The persistence guard** (`persist=True`) restores a label from the nearer section whenever its area in an
+  intermediate slice falls below half of the smaller section area. On this scene it lifts the proposed method from 0.000
+  to 0.580 (about the same as nearest, 0.590) and leaves the other phantoms unchanged (identical output on the arch scene, unchanged
+  metrics on the tilted scene). It is a safeguard against deletion, not a way to place the structure correctly.
+  It is off by default because it has been checked on three phantoms only.
+* **What would be needed.** The true intermediate slices (`results/split3_methods.png`, top row) show the three branches
+  growing outward from the junction along the tube axis. Neither blending distance fields nor translating components
+  produces that growth. A method that interpolates the centreline (skeleton) of thin structures, or models tubes
+  explicitly, is the obvious next step; none is implemented here.
+
+## 9. Known limitations and open questions
 
 * **Thin, shifting structures can bulge in the middle frames** under linear interpolation of distance fields: in an
   exploratory frame-by-frame area check (not included in this repository), a thin diagonal band grew about 3% above its
   end value at an intermediate frame. The cause has not been diagnosed and the check has not been repeated on reference
   frames of known provenance.
-* **Translation is one rigid shift per label**, and its benefit is inconsistent on real data.
+* **Label-level translation is one rigid shift per label**, and its benefit is inconsistent on real data; component-level
+  translation is only tested on the split phantom and produces spurious fragments there.
+* **Non-overlapping thin structures are not handled** (section 8): signed-distance interpolation deletes them in the gap
+  unless the persistence guard is on, and then they are only as good as repeating the nearest section.
 * **Smoothing** rounds sharp corners (about 0.02% of pixels on clean phantom sections) and will thin features narrower
   than about 2σ. σ between 0.5 and 2 px made little difference on the real example.
 * **Absent-label depth** (`absent`) is a free parameter; the phantom sweep was insensitive to it, but it controls

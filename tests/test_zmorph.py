@@ -78,3 +78,35 @@ def test_higher_order_reduces_to_linear_with_two_sections(scene):
     lin = reconstruct(two, 5, "sdf0")
     for m in ("sdf0_4pt", "sdf0_cubic"):
         assert (reconstruct(two, 5, m) == lin).all(), m
+
+
+def test_split3_scene_geometry():
+    """Three daughters, none overlapping the parent footprint of the previous section."""
+    import scipy.ndimage as ndi
+    gt = phantom.scene_split3()
+    L = gt == 1
+    comps = lambda z: ndi.label(L[z])[1]
+    assert [comps(z) for z in (0, 5, 10, 15, 20, 25)] == [1, 1, 1, 1, 3, 3]
+    cc, n = ndi.label(L[20])
+    assert all((L[15] & (cc == i)).sum() == 0 for i in range(1, n + 1))
+    assert [comps(z) for z in (16, 17, 18, 19)] == [1, 1, 1, 3]
+
+
+def test_persistence_guard_prevents_deletion_and_is_neutral_elsewhere():
+    gt = phantom.scene_split3()
+    secs = [gt[z] for z in range(0, 26, 5)]
+    plain = reconstruct(secs, 5, "sdf")
+    guarded = reconstruct(secs, 5, "sdf", persist=True)
+    assert min((plain[z] == 1).sum() for z in range(16, 20)) == 0           # the plain method deletes the neurite
+    assert min((guarded[z] == 1).sum() for z in range(16, 20)) > 0          # the guard keeps it
+    g2 = phantom.scene_branch()
+    s2 = [g2[z] for z in range(0, 31, 5)]
+    assert (reconstruct(s2, 5, "sdf", persist=True) == reconstruct(s2, 5, "sdf")).all()
+
+
+def test_component_translation_is_a_partition_and_keeps_sections():
+    gt = phantom.scene_split3()
+    secs = [gt[z] for z in range(0, 26, 5)]
+    v = reconstruct(secs, 5, "sdf", align="component", maxshift=40)
+    assert set(np.unique(v)) <= set(np.unique(gt))
+    assert (v[::5] == gt[::5]).mean() > 0.999
