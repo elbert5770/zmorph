@@ -10,6 +10,8 @@ lower and its upper label, so they are partitions by construction)
   guard       SDF competition; a label that would vanish between two sections that both contain it is
               restored from the heat2 frame (instead of the nearer section)
   field       SDF competition on fields fused with the SDF of the heat2 segmentation of the same slice
+  tube_guard  SDF competition + tube links (resolved forks of thin tubes), with heat2 restoring any label that
+              still vanishes
 """
 import numpy as np
 import scipy.ndimage as ndi
@@ -100,6 +102,8 @@ def heat_sdf_morph(sections, factor=5, mode="rank_avg", lam=0.5, sigma=1.0):
         return refine_with_sdf(heat, factor, sigma)
     if mode == "guard":
         return competition(sections, factor, "sdf", persist=True, persist_vol=heat, sigma=sigma)[0]
+    if mode == "tube_guard":
+        return competition(sections, factor, "sdf", tube=True, persist=True, persist_vol=heat, sigma=sigma)[0]
     if mode == "field":
         return competition(sections, factor, "sdf", prior_vol=heat, prior_w=lam, sigma=sigma)[0]
     raise ValueError(mode)

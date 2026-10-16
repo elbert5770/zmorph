@@ -98,6 +98,15 @@ near the source face. `method="heat2"` reaches 0.934 / 0.936 accuracy on the rea
 delete the thin neurite in the split scene (0.665). Source slices are exact in all heat variants. §9.4 discusses (without
 having tested) whether a diffusion model could help.
 
+### Combining heat2 with the SDF method (`docs/METHOD.md` §9.5, `results/fusion_study.md`)
+
+`zmorph.fusion.heat_sdf_morph` offers six combinations. Using the SDF crossing time as the pixel ordering inside heat2's
+switching rule (`sdf_rank`) gives the best geometry on the phantoms (arch Dice 0.986 / 0.12 px, tilted 0.970 / 0.20, better than
+either parent) and lands between them on the real section (0.937 / 0.939 accuracy). Fusing the fields (`field`) is the most
+noise-robust and ties the SDF method on real data. Restoring vanishing labels from heat2 (`guard`) improves the SDF method's
+safety net, and SDF + tube links + heat2 guard (`tube_guard`) is best on the split-scene variants (mean gap Dice 0.799). No
+single combination wins everywhere; §9.5 gives the regime-by-regime picture.
+
 ### Stress test: a thin neurite splitting into three non-overlapping branches (`docs/METHOD.md` §8)
 
 `phantom.scene_split3`, images in `results/split3_scene.png` and `results/split3_methods.png` (tilted neurites:

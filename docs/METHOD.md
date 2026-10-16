@@ -491,6 +491,69 @@ better where the rule fails, mainly for thin tubes that do not overlap across th
   the failure case is scarce. The cheapest first step is a small supervised network on triplets with no diffusion at all;
   diffusion is justified only if the mid-gap position is genuinely multi-modal and samples or uncertainty are needed.
 
+### 9.5 Combining heat2 with the SDF method
+
+The two methods fail in complementary ways. The SDF method gives smooth, noise-robust, sub-pixel boundaries and the best real-data
+accuracy, but its blended field can leave a thin, non-overlapping neurite with no pixels for most of the gap. `heat2` switches
+each differing pixel between its existing lower and upper label with an equal-area arrival rule, so a label cannot vanish and
+tilted neurites are handled well, but its pixel-level switching has no smoothing. `zmorph.fusion.heat_sdf_morph` implements six
+combinations (`run_fusion_study.py`, `results/fusion_study.md`; no post-filter; noisy = mean of 3 seeds):
+
+* `sdf_rank`: heat2's switching rule, with the pixels of each label ordered by the SDF two-label **crossing time** (the
+  time at which the lower and upper labels have equal interpolated signed distance) instead of by temperature; time-symmetric.
+* `rank_avg`: the mean of the heat2 and `sdf_rank` switch times. `time_avg`: the mean of the heat2 switch time and the raw
+  SDF crossing time (weight 0.5).
+* `refine`: heat2 frames smoothed with the SDF label smoothing (sources pinned).
+* `guard`: the SDF competition, where a label that would vanish between two sections that both contain it is restored from
+  the heat2 frame (the persistence guard of section 8, with heat2 instead of the nearer section).
+* `field`: the SDF competition on fields fused (weight 0.5) with the SDF of the heat2 segmentation of the same slice.
+
+| method | arch Dice / bd | tilted Dice / bd | arch noisy Dice / bd | split3 gap Dice | real smoothed acc / bd / Dice | real raw acc / bd / Dice |
+|---|---|---|---|---|---|---|
+| nearest (repeat) | 0.962 / 0.40 | 0.880 / 0.81 | 0.936 / 0.74 | 0.590 | 0.8368 / 3.46 / 0.761 | 0.8372 / 3.39 / 0.762 |
+| heat, published | 0.964 / 0.36 | 0.914 / 0.66 | 0.942 / 0.69 | 0.628 | 0.9166 / 1.75 / 0.881 | 0.9160 / 1.70 / 0.881 |
+| heat2 | 0.980 / 0.18 | 0.961 / 0.26 | 0.964 / 0.33 | 0.665 | 0.9336 / 1.40 / 0.909 | 0.9355 / 1.34 / 0.911 |
+| sdf (proposed) | 0.983 / 0.18 | 0.883 / 0.71 | 0.971 / 0.29 | 0.000 | 0.9396 / 1.30 / 0.914 | 0.9432 / 1.20 / 0.918 |
+| sdf + translation | 0.983 / 0.18 | 0.938 / 0.39 | 0.971 / 0.29 | 0.121 | 0.9420 / 1.27 / 0.922 | 0.9456 / 1.18 / 0.925 |
+| sdf + persistence guard | 0.983 / 0.18 | 0.883 / 0.71 | 0.971 / 0.29 | 0.580 | 0.9396 / 1.30 / 0.914 | 0.9432 / 1.20 / 0.918 |
+| sdf + tube links + guard | 0.983 / 0.18 | 0.883 / 0.71 | 0.971 / 0.29 | 0.927 | 0.9396 / 1.30 / 0.914 | 0.9432 / 1.20 / 0.918 |
+| FUSION sdf_rank (heat switching, SDF order) | 0.986 / 0.12 | 0.970 / 0.20 | 0.968 / 0.31 | 0.555 | 0.9368 / 1.39 / 0.909 | 0.9391 / 1.31 / 0.912 |
+| FUSION rank_avg (mean of heat2 and sdf_rank times) | 0.986 / 0.13 | 0.969 / 0.21 | 0.967 / 0.31 | 0.621 | 0.9377 / 1.33 / 0.913 | 0.9398 / 1.25 / 0.915 |
+| FUSION time_avg (heat2 and raw SDF crossing, w=0.5) | 0.984 / 0.15 | 0.942 / 0.37 | 0.970 / 0.30 | 0.537 | 0.9382 / 1.32 / 0.914 | 0.9407 / 1.25 / 0.917 |
+| FUSION refine (heat2 frames, SDF smoothing) | 0.980 / 0.18 | 0.963 / 0.24 | 0.969 / 0.28 | 0.649 | 0.9341 / 1.40 / 0.910 | 0.9360 / 1.34 / 0.912 |
+| FUSION guard (SDF, vanishing labels restored from heat2) | 0.983 / 0.18 | 0.883 / 0.71 | 0.971 / 0.29 | 0.649 | 0.9396 / 1.30 / 0.914 | 0.9432 / 1.20 / 0.918 |
+| FUSION field (SDF blend fused with SDF of heat2 slice, w=0.5) | 0.982 / 0.17 | 0.935 / 0.41 | 0.972 / 0.26 | 0.166 | 0.9406 / 1.28 / 0.918 | 0.9427 / 1.21 / 0.920 |
+
+* **`sdf_rank` / `rank_avg` give the best geometry on the phantoms**: arch 0.986 / 0.12-0.13 px and tilted 0.970 / 0.20, better
+  than both parents and than the SDF method with translation (0.938 / 0.39), without any translation step (the switching
+  framework already handles the shift). On the real sections they land between the parents (0.9368 / 0.9391 and 0.9377 / 0.9398,
+  against 0.9336 / 0.9355 for heat2 and 0.9396 / 0.9432 for the SDF method). On the split scene they are worse than heat2
+  (0.555 and 0.621, against 0.665).
+* **`field` fusion is the most noise-robust** (arch noisy 0.972 / 0.26) and ties the SDF method on real data (0.9406 / 0.9427
+  against 0.9396 / 0.9432), but it is worse than heat2 on the tilted phantom (0.935) and still deletes most of the thin neurite
+  in the split scene (0.166).
+* **`guard` leaves the SDF method unchanged wherever no label vanishes** (identical arch, tilted and real results, tested) and
+  raises the split-scene gap Dice from 0.580 (nearest-section guard) to 0.649, because heat2 places the label where it grows.
+* **`refine`** (SDF smoothing of heat2 frames) only helps under noise (0.964 -> 0.969) and is neutral elsewhere.
+* **Composite `tube_guard`** (SDF + tube links of section 8, with the heat2-restored guard): neurite Dice in the gap, averaged over
+  eight split-scene variants (junction height 15.5-19.5, daughter speed 4.5 and 7.5, radius 2.4):
+
+| method | mean gap Dice over the 8 variants |
+|---|---|
+| nearest | 0.608 |
+| heat2 | 0.686 |
+| SDF + tube links + nearest-section guard | 0.759 |
+| **SDF + tube links + heat2 guard (`tube_guard`)** | **0.799** |
+
+  It wins where the daughters are resolved (0.88-0.93 with tube links) and where the fork is unresolved (zJ = 17.5: 0.768 against
+  0.658 with the nearest guard), but in the variant with overlapping thin footprints (radius 2.4) heat2 alone is better (0.849
+  against 0.707), because there the SDF competition itself is the weaker part.
+* **No single combination dominates.** By regime: thick, overlapping neurites (the real tile): the SDF method, `field` fusion or
+  `rank_avg` (within about 0.4 points of each other, single triplet); thin tilted or shifting neurites: `sdf_rank` (or `heat2`);
+  connectivity-critical meshing with possible non-overlapping thin neurites: `tube_guard`, or `guard` if tube links are not
+  trusted. A per-label choice of the method from the overlap statistics (high overlap: SDF; none: heat2 or tube links) is the
+  obvious way to get the best of each automatically; it is not implemented or tested.
+
 ## 10. Known limitations and open questions
 
 * **Thin, shifting structures can bulge in the middle frames** under linear interpolation of distance fields: in an

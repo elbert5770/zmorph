@@ -175,3 +175,26 @@ def test_heat2_improves_on_the_published_heat_algorithm_on_the_arch_and_tilted_p
         old = evaluate(reconstruct(s, 5, "heat"), g)["bdist_mid"]
         new = evaluate(reconstruct(s, 5, "heat2"), g)["bdist_mid"]
         assert new < old
+
+
+@pytest.mark.parametrize("mode", ["heat2", "sdf_rank", "rank_avg", "time_avg", "refine"])
+def test_fusion_switching_modes_are_partitions_with_exact_sources(scene, mode):
+    from zmorph.fusion import heat_sdf_morph
+    gt, secs = scene
+    v = heat_sdf_morph(secs, 5, mode)
+    assert (v[::5] == gt[::5]).all()
+    assert set(np.unique(v)) <= set(np.unique(gt))
+
+
+def test_heat2_guard_is_neutral_when_nothing_vanishes_and_rescues_the_split_scene():
+    from zmorph.fusion import heat_sdf_morph
+    g = phantom.scene_branch()
+    s = [g[z] for z in range(0, g.shape[0], 5)]
+    assert (heat_sdf_morph(s, 5, "guard") == reconstruct(s, 5, "sdf")).all()        # the guard never fires on the arch
+    gt = phantom.scene_split3()
+    secs = [gt[z] for z in range(0, 26, 5)]
+    plain = reconstruct(secs, 5, "sdf")
+    for mode in ("guard", "tube_guard"):
+        v = heat_sdf_morph(secs, 5, mode)
+        assert min((v[z] == 1).sum() for z in range(16, 20)) > 0 > -1
+        assert evaluate(v, gt)["dice_branch_gap"] > evaluate(plain, gt)["dice_branch_gap"] + 0.5
