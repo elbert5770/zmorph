@@ -41,7 +41,7 @@ p = patches[a.patch]
 t = time.time(); m = margin_field(vol, H, cap=64.0); print(f"margin {time.time() - t:.0f}s")
 x0_ = release_positions(p, m, H, a.w, a.n, seed=1)
 dt = 0.5; nrec = 40; spr = int(a.tmax / dt / nrec)
-r = simulate_dynamic(m, H, x0_, lambda t: a.w, 1.0, dt, nrec=nrec, steps_per_rec=spr, seed=2)
+r = simulate_dynamic(m, H, x0_ / H, lambda t: a.w, 1.0, dt, nrec=nrec, steps_per_rec=spr, seed=2)
 dist = np.linalg.norm(r["pos"] - p.center, axis=2)
 res = dict(tile=a.tile, w=a.w, source=rows[a.patch] if a.patch < len(rows) else None, t=r["t"].tolist(),
            mean_dist_nm=dist.mean(1).tolist(), median_dist_nm=np.median(dist, 1).tolist(),

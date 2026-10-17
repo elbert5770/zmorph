@@ -208,7 +208,7 @@ def simulate_dynamic(m, h, x0, w_of_t, D=1.0, dt=0.25, nrec=100, steps_per_rec=1
                      patch=None, p_abs=None, seed=0):
     """Reflecting Brownian motion in the moving gap { m < w(t) } with absorbing membrane patches.
 
-    m: margin field (nm) on the grid; w_of_t: gap width in nm as a function of time (vectorised or scalar function);
+    m: margin field (nm) on the grid; x0: start positions in voxel units (as sample_ecs returns); w_of_t: gap width in nm as a function of time (vectorised or scalar function);
     patch: optional int array (same grid) giving a membrane-patch id at each voxel (0 = plain wall), looked up at the
     wall hit point; p_abs: absorption probability per hit for each patch id (array indexed by id).
     Returns dict: t, pos (nrec+1, n, 3) nm (frozen where absorbed), alive (nrec+1, n), wall_push (nrec, n) = sum of

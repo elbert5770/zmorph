@@ -120,7 +120,7 @@ def snap_annotations(patches, xyz_nm, max_dist=300.0):
 
 
 def release_positions(patch, m, h, w, n, reach=None, seed=0):
-    """n start positions (nm), uniform over ECS voxels { m < w } within `reach` (default max(w, 2h)) of the patch
+    """n start positions in nm (divide by h for bd.simulate_dynamic, whose x0 is in voxel units), uniform over ECS voxels { m < w } within `reach` (default max(w, 2h)) of the patch
     faces, jittered by up to half a voxel. A burst release; a release time course is a matter of when these start."""
     rng = np.random.default_rng(seed)
     reach = max(w, 2 * h) if reach is None else reach
@@ -133,4 +133,5 @@ def release_positions(patch, m, h, w, n, reach=None, seed=0):
     if len(g) == 0:
         raise ValueError("no ECS voxels near this patch; increase w or reach")
     pick = g[rng.integers(0, len(g), n)]
-    return (pick + rng.random((n, 3)) - 0.5) * h
+    x = (pick + rng.random((n, 3)) - 0.5) * h
+    return np.clip(x, 0, (np.array(m.shape) - 1) * h)
