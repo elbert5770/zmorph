@@ -34,3 +34,10 @@ Evidence is thin (my phantoms, one real tile), so most items below are about get
 - Phantom results (tube links, `sdf_rank`) are model-matched; do not quote them as validation.
 - On the real tile the differences among SDF, `field`, `rank_avg` and translation are a few tenths of a point on one triplet.
 - The `heat` baseline is my port of the published algorithm, not the Julia code.
+
+
+## Added 2026-10: extracellular-space (gap) work
+
+See `docs/DIFFUSION.md`. Diffusion benchmark done on phantoms. Next: channel patches and reactive species, flow (Stokes/lubrication
+on the interface network), electrical coupling (Poisson in the gap), `w(t)` from osmotic water flux, and a run on the real tiles
+(ECS fraction and tortuosity versus `w`). Open modelling choices: gap width prior, uniform vs variable `w`, matrix (Brinkman) vs free fluid.

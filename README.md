@@ -23,6 +23,10 @@ Only 2-D distance transforms, Gaussian filters and marching cubes are used: seco
 A fuller description (equations, parameters, baselines, evaluation protocol, failure modes) is in
 [`docs/METHOD.md`](docs/METHOD.md).
 
+The gap between cells (extracellular space) is a separate, newer line of work: Brownian dynamics on the implicit
+signed-distance gap with continuum reference solvers; see [`docs/DIFFUSION.md`](docs/DIFFUSION.md)
+(requires `numba`: `pip install zmorph[bd]`).
+
 ## Install and use
 
     pip install -e ".[test]"

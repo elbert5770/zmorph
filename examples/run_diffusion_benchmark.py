@@ -143,7 +143,28 @@ def sphere():
         RES["sphere"] = out; save()
 
 
+def sphere_mesh_smooth():
+    """Surface meshes from voxelised labels, with the two smoothing remedies: a Gaussian-smoothed distance field
+    (as sdf_align uses) and Taubin smoothing of the mesh."""
+    import scipy.ndimage as ndi
+    from zmorph.mesh import taubin_joint
+    out = RES["sphere"]; gam = out["exact_rate"]
+    for hv in (8.0, 4.0):
+        r, c = sphere_grid(hv, pad=8.0)
+        f0 = _sdf_subvoxel(r < R)
+        for tag, f, tb in ((f"mesh_labels_sigma1_h{hv:g}", ndi.gaussian_filter(f0, 1.0) * hv, False),
+                           (f"mesh_labels_taubin_h{hv:g}", f0 * hv, True),
+                           (f"mesh_labels_sigma1_taubin_h{hv:g}", ndi.gaussian_filter(f0, 1.0) * hv, True)):
+            v, fc, _, _ = marching_cubes(f, 0.0, spacing=(hv,) * 3)
+            if tb:
+                v, fc = taubin_joint({1: (v, fc)})[1]
+            k, _ = cotan_decay_rate(v, fc)
+            out[tag] = dict(rate=float(k), rel_err=float(k / gam - 1), verts=len(v))
+            log("sphere mesh", tag, k / gam - 1, len(v))
+    save()
+
+
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"
-    for name, fn in (("slab", slab), ("lattice", lattice), ("sphere", sphere)):
-        if which in (name, "all"): fn()
+    for name, fn in (("slab", slab), ("lattice", lattice), ("sphere", sphere), ("meshsmooth", sphere_mesh_smooth)):
+        if which == name or (which == "all" and name != "meshsmooth"): fn()

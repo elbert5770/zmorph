@@ -246,6 +246,36 @@
    "rel_err": -0.07717999665214947,
    "verts": 46950,
    "seconds": 2
+  },
+  "mesh_labels_sigma1_h8": {
+   "rate": 5.026404202678295e-05,
+   "rel_err": 0.006125275063593394,
+   "verts": 11646
+  },
+  "mesh_labels_taubin_h8": {
+   "rate": 4.9759120214334095e-05,
+   "rel_err": -0.00398164385798927,
+   "verts": 11646
+  },
+  "mesh_labels_sigma1_taubin_h8": {
+   "rate": 5.0268832301233725e-05,
+   "rel_err": 0.006221161029088318,
+   "verts": 11646
+  },
+  "mesh_labels_sigma1_h4": {
+   "rate": 4.9991501714724836e-05,
+   "rel_err": 0.0006698901526607237,
+   "verts": 46950
+  },
+  "mesh_labels_taubin_h4": {
+   "rate": 4.9643630398606836e-05,
+   "rel_err": -0.006293380398272208,
+   "verts": 46950
+  },
+  "mesh_labels_sigma1_taubin_h4": {
+   "rate": 5.001572860359597e-05,
+   "rel_err": 0.0011548349411523162,
+   "verts": 46950
   }
  }
 }

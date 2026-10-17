@@ -13,6 +13,7 @@ dependencies = ["numpy", "scipy", "scikit-image", "matplotlib"]
 
 [project.optional-dependencies]
 test = ["pytest"]
+bd = ["numba"]
 
 [tool.setuptools]
 packages = ["zmorph"]
