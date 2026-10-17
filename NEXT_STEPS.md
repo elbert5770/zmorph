@@ -38,6 +38,6 @@ Evidence is thin (my phantoms, one real tile), so most items below are about get
 
 ## Added 2026-10: extracellular-space (gap) work
 
-See `docs/DIFFUSION.md`. Diffusion benchmark done on phantoms. Next: channel patches and reactive species, flow (Stokes/lubrication
+See `docs/DIFFUSION.md`. Diffusion benchmark done on phantoms. Moving walls, wall force and absorbing patches are done (`results/bd_dynamic.md`). Next: compartments behind the patches and gating, reactive species, flow (Stokes/lubrication
 on the interface network), electrical coupling (Poisson in the gap), `w(t)` from osmotic water flux, and a run on the real tiles
 (ECS fraction and tortuosity versus `w`). Open modelling choices: gap width prior, uniform vs variable `w`, matrix (Brinkman) vs free fluid.

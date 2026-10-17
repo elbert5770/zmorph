@@ -49,10 +49,32 @@ roughness and resolution error, not a dihedral-angle error.
 * Point tracers in a free fluid: no matrix, no charge, no channels, no flow. Those are the next steps.
 * Tissue volumes were not run: only phantoms. `margin_field` on a real tile has not been timed.
 
+## Moving walls and membrane patches (second benchmark)
+
+Results: `results/bd_dynamic.md`; code: `simulate_dynamic`, `wall_force` in `zmorph/bd.py`; script
+`examples/run_bd_dynamic.py`; tests `tests/test_bd_dynamic.py`.
+
+* **Moving gap.** `simulate_dynamic(m, h, x0, w_of_t, ...)` moves the wall as the level set `m - w(t) = 0`; a wall that
+  advances onto a particle pushes it back inside. `w` is a scalar function of time here; a spatial field `w(x, t)` is a
+  one-line extension.
+* **Wall force from the reflections.** In overdamped dynamics the wall force is (kT/D) x (displacement the wall imposes) / time.
+  For a planar gap the total force on both walls equals 2 N kT / w to within 0.5% for every gap (12-40 nm) and step
+  (0.5-2 nm). This is the osmotic pressure of the tracer, measured mechanically, with no solvent.
+* **Piston.** Compressing a 40 nm gap to 20 nm slowly costs 1.00-1.05 x the isothermal work N kT ln 2; compressing fast costs
+  1.48 x. Expanding slowly returns 0.95-0.99 x, fast 0.66 x. Particles stay inside the gap throughout.
+* **Patches.** An integer patch map on the grid is looked up at the wall-hit point; absorption probability per hit p.
+  One absorbing wall: the decay rate of survivors matches the exact Robin result to 0.5-1.6% (a 4.6% outlier at the
+  coarsest step and Biot number 2), with p = kappa sqrt(pi dt / D). A checkerboard of patches over half of one wall behaves like
+  a uniform wall with kappa/2 (-0.7% and -0.3%); assuming full coverage would be 73-85% wrong. Absorptions on a spherical-shell
+  cap land inside the cap (largest polar angle 21, 41, 61 degrees for 20, 40, 60 degree caps).
+
+Limits: absorbed particles disappear (no compartment on the other side yet), patches are absorbing or reflecting (no gating),
+and the moving wall is a prescribed `w(t)` (no coupling to water flux).
+
 ## Next
 
-1. Channels as membrane patches (absorbing or partly reflecting), then reactive species and a discreteness check
-   against the continuum limit.
+1. Compartments on the far side of the patches (re-injection, gating), reactive species, and a discreteness check against the
+   continuum limit. `w` as a field, and `w(t)` coupled to osmotic water flux.
 2. Flow: Stokes/lubrication on the interface network with a thickness field; compare against BD-derived permeability
    in the same geometry.
 3. Electrical coupling: Poisson in the gap with membrane current sources.
