@@ -1,0 +1,45 @@
+{
+ "iters": 2,
+ "rows": [
+  {
+   "sigma": 0.0,
+   "ledge_volume": 13677,
+   "thin_fraction_A": 0.05359296361209821,
+   "volume_A": 62191,
+   "repro_at_input": 0.9994543063773832,
+   "heldout_acc": 0.9347008547008547
+  },
+  {
+   "sigma": 3.0,
+   "ledge_volume": 12711,
+   "thin_fraction_A": 0.04157516961095998,
+   "volume_A": 61022,
+   "repro_at_input": 0.9651084812623274,
+   "heldout_acc": 0.934985754985755
+  },
+  {
+   "sigma": 4.0,
+   "ledge_volume": 11965,
+   "thin_fraction_A": 0.03990898824154653,
+   "volume_A": 60212,
+   "repro_at_input": 0.9507692307692307,
+   "heldout_acc": 0.9295299145299145
+  },
+  {
+   "sigma": 5.0,
+   "ledge_volume": 10881,
+   "thin_fraction_A": 0.04104426941879413,
+   "volume_A": 58912,
+   "repro_at_input": 0.9339513477975016,
+   "heldout_acc": 0.9191595441595442
+  },
+  {
+   "sigma": 6.0,
+   "ledge_volume": 9350,
+   "thin_fraction_A": 0.04032766225582861,
+   "volume_A": 57132,
+   "repro_at_input": 0.9128139381985536,
+   "heldout_acc": 0.9046438746438747
+  }
+ ]
+}

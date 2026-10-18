@@ -53,3 +53,15 @@ def test_release_positions_lie_in_cleft():
     assert x.shape == (500, 3)
     assert np.abs(x[:, 2] - 11.5 * H).max() <= w / 2 + H / 2
     assert np.linalg.norm(x - p.center, axis=1).max() <= p.radius + 40 + H
+
+
+def test_smooth_labels_removes_thin_sheet_but_keeps_blocks():
+    from zmorph.mesh import smooth_labels
+    vol = np.ones((40, 40, 40), np.int64)
+    vol[:, :, 20:] = 2                                           # two big blocks
+    vol[10:30, 10:30, 17:20] = 3                                  # a 3-voxel thick sheet of cell 3 on block 1
+    out = smooth_labels(vol, 3.0, iters=2)[0]              # wedged between two blocks it needs a second pass
+    assert (out == 3).sum() == 0                                 # the sheet is gone
+    assert abs(int((out == 1).sum()) - int((vol != 2).sum())) < 0.02 * vol.size
+    big = np.ones((40, 40, 40), np.int64); big[:, :, 20:] = 2; big[5:35, 5:35, 4:20] = 3      # a 16-voxel slab survives, with its edges rounded
+    assert (smooth_labels(big, 3.0, iters=2)[0] == 3).sum() > 0.75 * (big == 3).sum()
