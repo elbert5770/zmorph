@@ -15,6 +15,7 @@ from zmorph.bd import margin_field, simulate_dynamic, sample_ecs, effective_diff
 ap = argparse.ArgumentParser()
 ap.add_argument("--tile", default="170398_60741"); ap.add_argument("--np", type=int, default=3000, dest="npart")
 ap.add_argument("--tmax", type=float, default=6e4)
+ap.add_argument("--ws", type=float, nargs="+", default=None); ap.add_argument("--tag", default="")
 a = ap.parse_args()
 H = 8.0; PER = (True, True, True)
 out = os.path.join(ROOT, "results", "tile15")
@@ -23,7 +24,7 @@ S = json.load(open(os.path.join(out, f"summary_{a.tile}.json")))
 fv = {r["w"]: r for r in S["ecs"]}
 m = margin_field(vol, H, cap=64.0)                       # same non-periodic margin the FV mask came from
 rows = []
-for w in sorted(fv):
+for w in (sorted(fv) if a.ws is None else a.ws):
     x0 = sample_ecs(m - w, H, a.npart, periodic=PER, seed=1)
     dt = 0.5; nrec = 40; spr = int(a.tmax / dt / nrec)
     r = simulate_dynamic(m, H, x0, lambda t: w, 1.0, dt, nrec=nrec, steps_per_rec=spr, periodic=PER, seed=2)
@@ -33,8 +34,8 @@ for w in sorted(fv):
                      ratio=[float(D[i] / f[i]) for i in range(3)]))
     print(f"w={w:3g}  FV (z,y,x)={np.round(f, 3)}  BD periodic={np.round(D, 3)} +-{np.round(sem, 3)}  "
           f"ratio={np.round(rows[-1]['ratio'], 2)}", flush=True)
-json.dump(dict(tile=a.tile, rows=rows), open(os.path.join(out, f"bd_periodic_{a.tile}.json"), "w"), indent=1)
-with open(os.path.join(out, f"bd_periodic_{a.tile}.md"), "w") as fh:
+json.dump(dict(tile=a.tile, rows=rows), open(os.path.join(out, f"bd_periodic_{a.tile}{a.tag}.json"), "w"), indent=1)
+with open(os.path.join(out, f"bd_periodic_{a.tile}{a.tag}.md"), "w") as fh:
     fh.write("| w (nm) | ECS fraction | FV 1/lam2 (z, y, x) | BD periodic D (z, y, x) | BD / FV (z, y, x) |\n|---|---|---|---|---|\n")
     for r in rows:
         j = lambda v: ", ".join(f"{x:.3f}" for x in v)
