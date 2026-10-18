@@ -82,13 +82,13 @@ for si, site in enumerate(sites):
     for R in a.rs:
         patch, lab = patch_map(site, R)
         for w in (a.ws if "static" in a.modes else []):
-            F = []
+            F = []; finals = []
             for sd in range(a.seeds):
                 fp = run(patch, lambda t, w=w: w, w, 10 * si + sd + 1)
-                F.append(fp["absorbed_frac"]); t = fp["t"]
+                F.append(fp["absorbed_frac"]); finals.append(float(fp["absorbed_frac"][-1])); t = fp["t"]
             F = np.mean(F, 0)
             rows.append(dict(site=si, site_nm=site.tolist(), label=lab, R=R, mode="static", w=w, t=t.tolist(), F=F.tolist(),
-                             F_final=float(F[-1]), F_uniform=uniform_release(t, F, a.tau).tolist(), patch_voxels=int(patch.sum())))
+                             F_final=float(F[-1]), F_final_seeds=finals, F_uniform=uniform_release(t, F, a.tau).tolist(), patch_voxels=int(patch.sum())))
             print(f"site {si} R {R:4.0f} static w={w:3.0f}: captured {F[-1]:.3f}  ({time.time() - t_start:.0f}s)", flush=True)
         # breathing, phase-averaged
         if "breathing" in a.modes:
