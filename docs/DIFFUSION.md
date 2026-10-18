@@ -127,6 +127,30 @@ converged at 20 nm, and the BD wall treatment or timestep may bias it slightly. 
 at w = 20-40 nm, with the method spread as the uncertainty. Both methods wrap the crop, so seams are shared artifacts, and the gap width is a prior.
 An earlier extrapolation of the sub-box correction to the full crop overshot (predicted about 0.36, 0.50, 0.48; direct f = 2 gave 0.34, 0.44, 0.44 at 20 nm).
 
+## Small patch sinks (disc-shaped absorbers)
+
+Script `examples/run_synapse_smallsink.py`; results `results/synapse_source/smallsink_170398_60741.{json,md}`. Same crop. Two sites in the gap
+about 500 nm from the top cleft; the sink is the part of the cell under the site within R of it (R = 100, 200, 300 nm), p = 1 per wall hit.
+800 tracers x 2 seeds per condition, tmax 1e6 (about 6.7 ms for D = 1.5e-10 m^2/s, an assumed value). Static w = 12, 20, 30, 40 nm; breathing
+w = 20 nm +-30% (period 1e5), burst released at 3 phases. No other sink, so the uncaptured fraction is still wandering at tmax.
+
+| R (nm) | site 0 captured by tmax | site 1 captured by tmax | spread over w (site 0 / 1) |
+|---|---|---|---|
+| 100 | 0.32-0.36 | 0.32-0.35 | 0.036 / 0.033 |
+| 200 | 0.63-0.65 | 0.55-0.57 | 0.018 / 0.023 |
+| 300 | 0.74 | 0.67-0.70 | 0.008 / 0.024 |
+
+* **w does not matter here either.** Across a 3-fold change in w the captured fraction varies by at most 3.6 points, with no monotonic trend, and
+  breathing falls inside the static range (phase-to-phase range 0.6-5.4 points). I did not measure seed scatter separately (two seeds were averaged),
+  so effects below about 3 points are not resolved.
+* **The patch size and the site do matter.** Capture rises steeply from R = 100 to 200 nm and saturates towards 300 nm; at R = 200 nm the two
+  sites differ by about 10 points. The local sheet network (how many routes lead to the patch) matters more than the gap width.
+* Half of the final capture is reached at 1.3-2.8e5, earlier for larger patches. A release spread uniformly over 2e5 lowers capture by tmax by
+  1-2 points (the table in the .md).
+* Not done: a comparison with an analytic rate (the sheet network is not a plane, so no closed form applies), partial absorption (p < 1) on
+  small patches, and more sites. The large sink earlier and these small ones agree that, in a thin-sheet network, geometry of connectivity
+  and target size set the clearance and the gap width does not.
+
 ## Next
 
 1. Compartments on the far side of the patches (re-injection, gating), reactive species, and a discreteness check against the
