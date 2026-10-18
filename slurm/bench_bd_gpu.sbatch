@@ -43,6 +43,12 @@ conda activate "$ENV_DIR"
 cd "$REPO"
 echo "node: $(hostname)  job: ${SLURM_JOB_ID:-local}  threads: $NUMBA_NUM_THREADS"
 nvidia-smi
+conda list 2>/dev/null | grep -i -E "^(numba|cuda|nvidia|pynvjitlink|nvjitlink|cudatoolkit|numba-cuda)" || true
+
+# The driver's PTX JIT only accepts PTX up to the version of the driver's CUDA release. If numba's NVVM is newer than
+# the driver (error CUDA_ERROR_UNSUPPORTED_PTX_VERSION), link with nvJitLink instead (bundled ptxas -> cubin):
+#   pip install pynvjitlink-cu12   (or -cu13, matching the toolkit in the environment), then submit with ZMORPH_NVJITLINK=1
+if [ "${ZMORPH_NVJITLINK:-0}" = "1" ]; then export NUMBA_CUDA_ENABLE_PYNVJITLINK=1; fi
 
 python - <<'PY'
 import sys
@@ -61,7 +67,7 @@ fi
 OUT="results/gpu_bench/bench_${SLURM_JOB_ID:-local}.txt"
 
 # 2. kernel logic tests on the real device
-python -m pytest tests/test_bd_gpu.py -q 2>&1 | tee "$OUT"
+python -m pytest tests/test_bd_gpu.py -q 2>&1 | tee "$OUT" || echo "GPU kernel tests FAILED (see above); continuing to the benchmark" | tee -a "$OUT"
 
 # 3. throughput on CPU and GPU, and the sink-problem cross-check
 python examples/bench_bd_gpu.py --ns 1000 10000 100000 1000000 --steps 2000 --check-n 100000 2>&1 | tee -a "$OUT"
