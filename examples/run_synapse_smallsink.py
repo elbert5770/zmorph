@@ -28,7 +28,11 @@ ap.add_argument("--period", type=float, default=1e5); ap.add_argument("--phases"
 ap.add_argument("--n", type=int, default=1500); ap.add_argument("--tmax", type=float, default=2e6)
 ap.add_argument("--tau", type=float, default=2e5, help="duration of the uniform release profile")
 ap.add_argument("--seeds", type=int, default=2); ap.add_argument("--tag", default="")
+ap.add_argument("--gpu", action="store_true", help="use the numba.cuda kernel (zmorph.bd_gpu, float32) instead of the CPU code")
+ap.add_argument("--modes", nargs="+", default=["static", "breathing"], choices=["static", "breathing"])
 a = ap.parse_args()
+if a.gpu:
+    from zmorph.bd_gpu import simulate_dynamic_gpu
 H = 8.0; dt = 0.5; nrec = 40; spr = int(a.tmax / dt / nrec)
 out = os.path.join(ROOT, "results", "synapse_source")
 g = np.load(os.path.join(out, f"geom_{a.tile}.npz")); m = g["m"].astype(np.float64); center = g["center"]; pts = g["points"]
@@ -61,7 +65,8 @@ def patch_map(site, R):
 
 def run(patch, wf, wrel, seed):
     x0 = release_positions(_P, m, H, wrel, a.n, seed=seed) / H
-    r = simulate_dynamic(m, H, x0, wf, 1.0, dt, nrec=nrec, steps_per_rec=spr, patch=patch, p_abs=[0.0, 1.0], seed=seed + 100)
+    kw = dict(nrec=nrec, steps_per_rec=spr, patch=patch, p_abs=[0.0, 1.0], seed=seed + 100)
+    r = simulate_dynamic_gpu(m, H, x0, wf, 1.0, dt, record_pos=False, **kw) if a.gpu else simulate_dynamic(m, H, x0, wf, 1.0, dt, **kw)
     return first_passage(r)
 
 
@@ -76,7 +81,7 @@ t_start = time.time()
 for si, site in enumerate(sites):
     for R in a.rs:
         patch, lab = patch_map(site, R)
-        for w in a.ws:
+        for w in (a.ws if "static" in a.modes else []):
             F = []
             for sd in range(a.seeds):
                 fp = run(patch, lambda t, w=w: w, w, 10 * si + sd + 1)
@@ -86,16 +91,17 @@ for si, site in enumerate(sites):
                              F_final=float(F[-1]), F_uniform=uniform_release(t, F, a.tau).tolist(), patch_voxels=int(patch.sum())))
             print(f"site {si} R {R:4.0f} static w={w:3.0f}: captured {F[-1]:.3f}  ({time.time() - t_start:.0f}s)", flush=True)
         # breathing, phase-averaged
-        Fs = []
-        for ph in range(a.phases):
-            off = ph * a.period / a.phases
-            wf = lambda t, off=off: a.w0 * (1 + a.amp * np.sin(2 * np.pi * (t + off) / a.period))
-            fp = run(patch, wf, a.w0 * (1 - a.amp), ph + 50)
-            Fs.append(fp["absorbed_frac"])
-        F = np.mean(Fs, 0)
-        rows.append(dict(site=si, site_nm=site.tolist(), label=lab, R=R, mode="breathing", w=a.w0, t=t.tolist(), F=F.tolist(),
-                         F_final=float(F[-1]), F_phase_spread=float(np.ptp([f[-1] for f in Fs])), patch_voxels=int(patch.sum())))
-        print(f"site {si} R {R:4.0f} breathing w0={a.w0:g}: captured {F[-1]:.3f} (phase range {np.ptp([f[-1] for f in Fs]):.3f})", flush=True)
+        if "breathing" in a.modes:
+            Fs = []
+            for ph in range(a.phases):
+                off = ph * a.period / a.phases
+                wf = lambda t, off=off: a.w0 * (1 + a.amp * np.sin(2 * np.pi * (t + off) / a.period))
+                fp = run(patch, wf, a.w0 * (1 - a.amp), ph + 50)
+                Fs.append(fp["absorbed_frac"])
+            F = np.mean(Fs, 0)
+            rows.append(dict(site=si, site_nm=site.tolist(), label=lab, R=R, mode="breathing", w=a.w0, t=fp["t"].tolist(), F=F.tolist(),
+                             F_final=float(F[-1]), F_phase_spread=float(np.ptp([f[-1] for f in Fs])), patch_voxels=int(patch.sum())))
+            print(f"site {si} R {R:4.0f} breathing w0={a.w0:g}: captured {F[-1]:.3f} (phase range {np.ptp([f[-1] for f in Fs]):.3f})", flush=True)
         json.dump(dict(tile=a.tile, args=vars(a), source_center=center.tolist(), rows=rows),
                   open(os.path.join(out, f"smallsink{a.tag}_{a.tile}.json"), "w"), indent=1)
 
