@@ -55,6 +55,16 @@ Other methods for comparison: `nearest`, `sdf0` (classic binary SDF), `harmonic`
 `heat` (a port of the algorithm of Elbert, *A heat method to interpolate z-stacked cell images that preserves
 interfaces without explicit identification of object boundaries*, bioRxiv 2025.04.11.648268).
 
+## Viewing the fields and meshes (ParaView)
+
+`zmorph.export.write_vti` writes the signed-distance (competition) fields, the margin, labels and masks as VTK XML ImageData
+(`.vti`, zlib-compressed), which ParaView opens directly: Slice, Contour (isosurface at 0, or at the gap level w), Threshold
+(`gap_<w>nm = 1` is the gap as a solid) and Volume rendering. `zmorph.export.write_ply` writes all cell meshes in one
+coloured PLY. `competition_meshes(..., gap=w/h)` meshes each cell at the level set `m_k = w/h`, i.e. every cell shrunk by
+w/2, so the meshes no longer touch; `gap=0` gives the conforming meshes that share their interface vertices.
+`python examples/export_sdf_gap.py` writes an example to `results/sdf_export/` and draws `results/sdf_gap.png`.
+Other formats that would carry the same grid are NIfTI, MetaImage/NRRD and OpenVDB (made for level sets); `.vti` needs no extra library.
+
 ## Reproduce the synthetic benchmarks
 
     python run_benchmark.py --seeds 5   # results/benchmark.md

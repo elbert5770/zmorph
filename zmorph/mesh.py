@@ -14,15 +14,22 @@ from skimage import measure
 from .interp import competition
 
 
-def competition_meshes(sections, factor=5, min_voxels=50, **kw):
+def competition_meshes(sections, factor=5, min_voxels=50, gap=0.0, **kw):
+    """Conforming per-cell meshes from the competition fields. `gap` (in voxels, 0 = none) opens a gap of that thickness
+    between neighbouring cells: the cell surface is the level set  m_k = gap  instead of  m_k = 0, i.e. each cell is
+    shrunk by gap / 2 (the competition field of two cells is twice the distance to their interface). Cells thinner than
+    the gap vanish. With gap = 0 neighbouring meshes share their interface vertices."""
     lab, best, second, fields = competition(sections, factor, "sdf", return_fields=True, **kw)
     meshes = {}
     for k, f in fields.items():
         if (lab == k).sum() < min_voxels:
             continue
         other = np.where(lab == k, second, best)
-        m = np.pad(f - np.where(np.isfinite(other), other, -12.0), 1, constant_values=-1.0)
-        v, fc, _, _ = measure.marching_cubes(m, 0.0)
+        m = np.pad(f - np.where(np.isfinite(other), other, -12.0), 1, constant_values=-1.0 - abs(gap))
+        try:
+            v, fc, _, _ = measure.marching_cubes(m, float(gap))
+        except ValueError:
+            continue
         meshes[int(k)] = (v - 1.0, fc)
     return lab, meshes
 
