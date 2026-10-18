@@ -39,7 +39,7 @@ plt.rcParams.update({"text.color": ink})
 ball3 = ball(3); a_led = (17413, 17417)
 base_lab, base_meshes = competition_meshes(secs, 5, align=True)
 even = secs[0::2]; odd_truth = secs[1::2]                                        # predict the odd frames from the even ones
-pred_vol = reconstruct(even, 10, "sdf", align=True)                              # isotropic 8 nm slices: frame f0 + 2i at slice 10 i, odd frames at 10 i + 5
+pred_vol = reconstruct(even, 10, "sdf", align=True, regularize=None)                            # isotropic 8 nm slices: frame f0 + 2i at slice 10 i, odd frames at 10 i + 5
 rows, meshes = [], {0.0: base_meshes}
 
 

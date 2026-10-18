@@ -113,7 +113,7 @@ def taubin_joint(meshes, iters=15, lam=0.5, mu=-0.53):
 # ----------------------------------------------------------------------------- label regularisation (minimum feature width)
 def smooth_labels(vol, sigma, iters=1):
     """Threshold dynamics on a label volume (MBO scheme for multi-label mean-curvature flow): blur each label's indicator
-    with a Gaussian of `sigma` voxels and give every voxel to the label with the largest blurred value; repeat `iters`
+    with a Gaussian of `sigma` voxels (a number, or one per axis (z, y, x)) and give every voxel to the label with the largest blurred value; repeat `iters`
     times. Features narrower than about 2 sigma (thin ledges, spikes, one-voxel bridges) lose to their neighbours. Convex
     edges and corners of larger structures round off too (a 30 x 30 x 16 voxel slab loses about 20% of its volume at
     sigma = 3 in two passes), so choose sigma as small as the artefacts allow. Unlike smoothing the signed distances (which keeps a thin sheet
@@ -121,7 +121,7 @@ def smooth_labels(vol, sigma, iters=1):
     below its neighbour. Returns (labels, best, second, last-iteration input labels) where best and second are the
     largest and second-largest blurred indicator at each voxel."""
     cur = vol
-    pad = int(np.ceil(4 * sigma)) + 1
+    pad = int(np.ceil(4 * np.max(sigma))) + 1
     for _ in range(max(int(iters), 1)):
         best = np.full(cur.shape, -1.0, np.float32); second = np.full(cur.shape, -1.0, np.float32)
         lab = np.zeros(cur.shape, vol.dtype)
@@ -141,7 +141,7 @@ def smoothed_competition_meshes(vol, sigma, iters=1, min_voxels=50):
     """Conforming per-cell meshes of the regularised labels: for cell k, marching cubes of g_k - max_{j != k} g_j
     (g = blurred indicators of the last iteration), whose zero set is shared by neighbouring cells."""
     lab, best, second, prev = smooth_labels(vol, sigma, iters)
-    pad = int(np.ceil(4 * sigma)) + 1
+    pad = int(np.ceil(4 * np.max(sigma))) + 1
     meshes = {}
     idx = np.unique(prev, return_inverse=True)[1].reshape(prev.shape) + 1
     for k, sl in zip(np.unique(prev), ndi.find_objects(idx)):

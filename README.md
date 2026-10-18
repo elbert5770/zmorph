@@ -43,6 +43,14 @@ labels, meshes = competition_meshes(sections, factor=5)     # {label: (vertices,
 meshes = taubin_joint(meshes)                               # optional joint smoothing
 ```
 
+**Regularisation (default for `method="sdf"`).** `reconstruct` finishes the proposed method with two passes of threshold
+dynamics at sigma = 1 pixel (`zmorph.mesh.smooth_labels`), which removes features about one voxel wide, such as a
+one-voxel spike present in a single section. The input sections are then reproduced at about 99.5% of pixels, not
+exactly. `regularize=False` (or `None`) gives the unregularised interpolation, `regularize=(sigma_px, passes)` applies
+it to any method except `nearest`, and the baselines (`nearest`, `sdf0`, `harmonic`, `heat`, `heat2`) are left alone by
+default. Results and tables in this repository that predate the option were made without it; pass `regularize=None`
+to reproduce them. `competition_meshes` is not regularised; `smoothed_competition_meshes` is the regularised version.
+
 Other methods for comparison: `nearest`, `sdf0` (classic binary SDF), `harmonic` (steady-state heat field),
 `heat` (a port of the algorithm of Elbert, *A heat method to interpolate z-stacked cell images that preserves
 interfaces without explicit identification of object boundaries*, bioRxiv 2025.04.11.648268).

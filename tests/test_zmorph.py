@@ -22,9 +22,9 @@ def test_output_is_a_partition_with_known_labels(scene, method):
 
 def test_sdf_reproduces_clean_sections_and_identical_sections(scene):
     gt, secs = scene
-    v = reconstruct(secs, 5, "sdf", clean=True)
+    v = reconstruct(secs, 5, "sdf", clean=True, regularize=None)
     assert (v[::5] == gt[::5]).mean() > 0.999        # sigma=1 rounds a few corner pixels (~0.02%)
-    same = reconstruct([secs[2]] * 3, 5, "sdf")       # nothing moves -> nothing may change
+    same = reconstruct([secs[2]] * 3, 5, "sdf", regularize=None)       # nothing moves -> nothing may change
     assert all((same[z] == same[0]).all() for z in range(same.shape[0]))
     assert (same[0] == secs[2]).mean() > 0.999
 
@@ -107,7 +107,7 @@ def test_persistence_guard_prevents_deletion_and_is_neutral_elsewhere():
 def test_component_translation_is_a_partition_and_keeps_sections():
     gt = phantom.scene_split3()
     secs = [gt[z] for z in range(0, 26, 5)]
-    v = reconstruct(secs, 5, "sdf", align="component", maxshift=40)
+    v = reconstruct(secs, 5, "sdf", align="component", maxshift=40, regularize=None)
     assert set(np.unique(v)) <= set(np.unique(gt))
     assert (v[::5] == gt[::5]).mean() > 0.999
 
@@ -134,7 +134,7 @@ def test_tube_links_solve_the_split_scene_and_do_no_harm_elsewhere():
         assert lk is not None and lk["mode"] == "up" and 0.0 < lk["zJ"] < 2.0   # junction estimated near the true z=15.5 (0.5)
         speeds.append(float(np.linalg.norm(lk["shift"])))
     assert all(abs(s - 6.0) < 0.8 for s in speeds)                              # true daughter speed is 6 px per z
-    r = evaluate(reconstruct(secs, 5, "sdf", tube=True, persist=True), gt)
+    r = evaluate(reconstruct(secs, 5, "sdf", tube=True, persist=True, regularize=None), gt)
     assert r["dice_branch_gap"] > 0.85
     for fn in (phantom.scene_branch, phantom.scene_tilted):                      # no overlap-free thin branches there: unchanged
         g = fn()
@@ -145,8 +145,8 @@ def test_tube_links_solve_the_split_scene_and_do_no_harm_elsewhere():
 def test_tube_with_persistence_is_not_worse_than_persistence_when_the_junction_pair_has_no_valid_link():
     gt = phantom.scene_split3(zJ=17.5)       # daughters unresolved at section 20: that footprint is not an ellipse
     secs = [gt[z] for z in range(0, 26, 5)]
-    a = reconstruct(secs, 5, "sdf", persist=True)
-    b = reconstruct(secs, 5, "sdf", tube=True, persist=True)
+    a = reconstruct(secs, 5, "sdf", persist=True, regularize=None)
+    b = reconstruct(secs, 5, "sdf", tube=True, persist=True, regularize=None)
     gap = lambda v: evaluate(v, gt)["dice_branch_gap"]
     assert gap(b) >= gap(a) - 0.01                                           # junction pair: falls back to the guard
     assert evaluate(b, gt)["dice_mid"] >= evaluate(a, gt)["dice_mid"]        # and other pairs (non-overlapping parent) improve
@@ -190,7 +190,7 @@ def test_heat2_guard_is_neutral_when_nothing_vanishes_and_rescues_the_split_scen
     from zmorph.fusion import heat_sdf_morph
     g = phantom.scene_branch()
     s = [g[z] for z in range(0, g.shape[0], 5)]
-    assert (heat_sdf_morph(s, 5, "guard") == reconstruct(s, 5, "sdf")).all()        # the guard never fires on the arch
+    assert (heat_sdf_morph(s, 5, "guard") == reconstruct(s, 5, "sdf", regularize=None)).all()        # the guard never fires on the arch
     gt = phantom.scene_split3()
     secs = [gt[z] for z in range(0, 26, 5)]
     plain = reconstruct(secs, 5, "sdf")
@@ -211,3 +211,18 @@ def test_tiling_with_a_large_halo_matches_the_full_frame_and_a_zero_halo_does_no
     none = reconstruct_tiled(secs, 5, f, tile=64, halo=0)
     assert (big != full).mean() < (none != full).mean()
     assert (big[::5] == full[::5]).mean() > 0.999
+
+
+def test_default_regularisation_is_smooth_labels_on_the_proposed_method_only():
+    from zmorph.mesh import smooth_labels
+    base = np.zeros((40, 40), np.int64); base[:, :20] = 1; base[:, 20:] = 2
+    spike = base.copy(); spike[14:17, 20:31] = 1                               # a 3-pixel wide blade of cell 1 present in one section only
+    secs = [base, spike, base]
+    raw = reconstruct(secs, 5, "sdf", regularize=None)
+    reg = reconstruct(secs, 5, "sdf")                                           # the default: sigma 1 px, two passes (isotropic at factor 5)
+    assert (reg == smooth_labels(raw, (1.0, 1.0, 1.0), 2)[0]).all()
+    assert (reg[::5] == np.stack(secs)).mean() > 0.99                           # only the blade (33 of 4800 pixels) and a few corners change
+    for m in ("nearest", "heat", "sdf0"):                                      # published baselines are left alone by default
+        assert (reconstruct(secs, 5, m) == reconstruct(secs, 5, m, regularize=None)).all()
+    assert (reconstruct(secs, 5, "heat", regularize=(1.0, 2)) != reconstruct(secs, 5, "heat", regularize=None)).any()
+    assert (reconstruct(secs, 5, "nearest", regularize=(1.0, 2)) == reconstruct(secs, 5, "nearest", regularize=None)).all()

@@ -424,7 +424,27 @@ def competition_multi(sections, factor=5, interp="cubic", **kw):
     return lab, best, second
 
 
-def reconstruct(sections, factor=5, method="sdf", clean=False, min_area=12, **kw):
+ZXY = 5.0                     # section spacing over pixel size (40 nm / 8 nm) for the MICrONS data
+REGULARIZE = (1.0, 2)         # (sigma in pixels, passes) of the default regularisation of the proposed method
+_PROPOSED = ("sdf", "sdf_cubic", "sdf_4pt")
+
+
+def reconstruct(sections, factor=5, method="sdf", clean=False, min_area=12, regularize=True, **kw):
+    """Interpolate label sections to `factor` slices per section gap.
+
+    `regularize` removes features thinner than about a pixel (spikes one voxel wide, one-voxel bridges) with
+    `zmorph.mesh.smooth_labels`: True applies the default `REGULARIZE` = (1 pixel, 2 passes) to the proposed method
+    ("sdf", "sdf_cubic", "sdf_4pt") only, so the published baselines (nearest, heat, heat2, harmonic, sdf0) stay what they
+    are; a tuple (sigma_px, passes) applies to any method except "nearest"; False or None switches it off. sigma is
+    in 8 nm pixels in the plane and is scaled along z by factor / 5 so that the kernel is isotropic for 8 x 8 x 40 nm
+    voxels. At sigma = 1 px and two passes the input sections are reproduced at about 99.5% of pixels (not exactly)."""
+    if regularize is True:
+        regularize = REGULARIZE if method in _PROPOSED else None
+    if regularize and method != "nearest":
+        vol = reconstruct(sections, factor, method, clean=clean, min_area=min_area, regularize=None, **kw)
+        from .mesh import smooth_labels
+        sg, passes = regularize
+        return smooth_labels(vol, (sg * factor / ZXY, sg, sg), passes)[0]
     sections = [np.asarray(s) for s in sections]
     if clean:
         sections = clean_sections(sections, min_area)
