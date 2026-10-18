@@ -47,7 +47,8 @@ roughness and resolution error, not a dihedral-angle error.
 * BD errors are about 1-2% (1 sem); differences below that are not resolved. Particle counts: 4-6 thousand
   (lattice) and 20 thousand (sphere).
 * Point tracers in a free fluid: no matrix, no charge, no channels, no flow. Those are the next steps.
-* Tissue volumes were not run: only phantoms. `margin_field` on a real tile has not been timed.
+* The first two benchmarks use phantoms. A real tile crop is treated in the last two sections; `margin_field` on the 71 x 256 x 256 crop takes
+  about 10-100 s depending on the number of labels in the crop.
 
 ## Moving walls and membrane patches (second benchmark)
 
@@ -71,6 +72,61 @@ Results: `results/bd_dynamic.md`; code: `simulate_dynamic`, `wall_force` in `zmo
 Limits: absorbed particles disappear (no compartment on the other side yet), patches are absorbing or reflecting (no gating),
 and the moving wall is a prescribed `w(t)` (no coupling to water flux).
 
+## Synaptic sources and release on a real tile
+
+Code: `zmorph/synapse.py`; scripts `examples/run_synapse_source.py`, `run_synapse_sweep.py`, `make_spread_figure.py`;
+results `results/synapse_source/`; tests `tests/test_synapse.py`. Crop: tile `170398_60741`, rows and columns 0-256,
+sections 0-40 (201 slices at 8 nm).
+
+* **Candidate clefts.** `contact_patches` finds connected contact patches between touching labels and describes each by centre,
+  normal, disc-equivalent area and radius, roundness and flatness; `score_patches` gives a synapse-likeness from 0 to 1 (area window about
+  0.02-0.3 um^2, round, flat). This is geometry only: labels carry no PSD or vesicle information, so non-synaptic contacts score the same.
+  `snap_annotations` replaces the guess with real synapse positions when they exist. On the crop there are 759 patches; the top ten
+  score 0.85-0.89 with areas 0.04-0.10 um^2.
+* **Release.** `release_positions` returns a burst of tracers in the ECS voxels near the chosen patch. Units: it returns nm;
+  `simulate_dynamic` takes `x0` in voxel units (an early run passed nm and the tracers never moved).
+* **Static gap and breathing gap.** From the top patch, 2000 tracers, tmax 2e5 (about 1.3 ms for D = 1.5e-10 m^2/s, an assumed Abeta value):
+  rms displacement is 698-704 nm for w = 12-30 nm (no change within seed scatter), 723 nm at 40 nm and 741 nm at 60 nm. A ramp
+  from 20 to 32 nm gives 719 nm; oscillations of +-30% about 20 nm give 707-712 nm, indistinguishable from the static mean. Diffusion in a thin
+  sheet is two-dimensional and independent of its thickness, so only tunnels and pools should make `w` matter, which they do slowly here.
+  These runs used a short window; apparent D from them is biased high (see below).
+* Release is a single burst at t = 0; absorbing sinks and a release time course are not built.
+
+## The real-tile pipeline: interpolation, meshes and ECS tortuosity (15 sections)
+
+Script `examples/run_tile15.py` (results `results/tile15/summary_*.json`, `volume.npz`; `meshes.npz` is regenerated, not committed),
+`run_tile15_bd_periodic.py`, `run_tile15_fv_refined.py`. Same crop, sections 0-14, sdf_align with factor 5 (71 slices).
+
+**Interpolation and meshes.** The input sections are reproduced at 99.95% of pixels (not exactly; cause not traced). 60 of the 61 labels
+in the sections appear in the volume and one label gains an extra connected component. The 59 competition-field meshes are all watertight
+(1.95 million triangles); 93% of interface vertices are shared exactly between neighbouring cells (95th percentile of the rest 0.05 voxel); the
+5th-percentile minimum angle is 5.7 degrees.
+
+**ECS fraction and tortuosity** (`m < w`, periodic cell problem for FV; D and 1/lambda^2 are in units of the free D; axes z, y, x):
+
+| w (nm) | ECS fraction | FV f=1 | FV f=2 | BD periodic, tmax 2e6 |
+|---|---|---|---|---|
+| 20 | 0.158 (f=1), 0.143 (f=2) | 0.305, 0.397, 0.400 | 0.336, 0.437, 0.435 | 0.368, 0.495, 0.478 |
+| 40 | 0.261 (f=1), 0.272 (f=2) | 0.382, 0.473, 0.480 | 0.416, 0.507, 0.509 | 0.462, 0.542, 0.554 |
+
+Cell problem on the original grid (f=1) for the other widths: w = 10, 16, 30, 60 nm give ECS fractions 0.089, 0.137, 0.218, 0.389 and
+1/lambda^2 in x of 0.31, 0.39, 0.45, 0.55.
+
+**How the FV and BD estimates were reconciled.** The first comparison (BD run to about 220 nm rms displacement, non-periodic) had BD 20-85% above FV.
+Three separate causes, in order of size:
+
+1. *BD time window.* In a structured medium the apparent diffusivity falls with time towards its long-time value. Extending tmax from 6e4 to
+   6e5 to 2e6 reduced D at w = 20 nm in x from 0.62 to 0.52 to 0.48 and at 40 nm from 0.67 to 0.57 to 0.55; the last step is within error. Short-window
+   D from the sweeps above is therefore biased high.
+2. *The voxel staircase in FV.* Refining the grid by resampling the margin field (trilinear, periodic) raises FV: f = 1 to 2 by 8-13% at 20 nm and
+   7-9% at 40 nm; f = 2 to 3 (128-pixel sub-box) by 3-4% at 20 nm and about 1% at 40 nm. The full crop was run at f = 2 only; f = 3 was not run.
+3. *Crop boundaries.* Making BD periodic like the FV solver changed almost nothing.
+
+What remains is BD about 7-13% above FV at f = 2 (1.09-1.13 at 20 nm; 1.07-1.11 at 40 nm). The cause is not identified: FV may not be fully
+converged at 20 nm, and the BD wall treatment or timestep may bias it slightly. Quote the tortuosity as 1/lambda^2 of roughly 0.4-0.5 in x and y
+at w = 20-40 nm, with the method spread as the uncertainty. Both methods wrap the crop, so seams are shared artifacts, and the gap width is a prior.
+An earlier extrapolation of the sub-box correction to the full crop overshot (predicted about 0.36, 0.50, 0.48; direct f = 2 gave 0.34, 0.44, 0.44 at 20 nm).
+
 ## Next
 
 1. Compartments on the far side of the patches (re-injection, gating), reactive species, and a discreteness check against the
@@ -79,4 +135,5 @@ and the moving wall is a prescribed `w(t)` (no coupling to water flux).
    in the same geometry.
 3. Electrical coupling: Poisson in the gap with membrane current sources.
 4. `w(t)` driven by osmotic water flux (the sleep expansion) as a moving level set.
-5. Apply to the real tile (`data/tile_*.npz`): margin field after sdf_align, ECS fraction and tortuosity versus `w`.
+5. Done for one 15-section crop (above). Still open: more tiles and crops without periodic wrapping, full-crop FV at f = 3, a BD timestep
+   and wall-treatment check to close the last 10%, absorbing sinks and a release time course for the Abeta runs.
