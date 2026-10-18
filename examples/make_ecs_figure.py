@@ -74,14 +74,37 @@ def setup3d(ax, title):
     ax.grid(False)
 
 
-PAL = np.array([to_rgb(h) for h in ["#8fb8d8", "#e3b778", "#a6c98f", "#d99aa5", "#b7a6d6", "#9fd1c7", "#e0cf86", "#c4a58a", "#9bb0c2", "#cdb4a3"]])
+import colorsys
 ink, sub = "#1f2933", "#5f6b76"
 plt.rcParams.update({"text.color": ink, "axes.labelcolor": ink, "xtick.color": sub, "ytick.color": sub})
 fig = plt.figure(figsize=(15.5, 6.2))
 
 
-def colour(q):                                   # one colour per cell, shared by panels A and B
-    return PAL[(int(q) * 2654435761 % 2**32) % len(PAL)]
+def _assign_hues(vol, nhue=12):
+    """Hue (0-1) per cell: greedy colouring of the contact graph over `nhue` evenly spaced hues, so cells that touch
+    get well separated points on the full spectrum (colour-vision-deficiency software can then remap hues)."""
+    nb = {}
+    for ax in range(3):
+        lo_ = vol[tuple(slice(None, -1) if k_ == ax else slice(None) for k_ in range(3))]
+        hi_ = vol[tuple(slice(1, None) if k_ == ax else slice(None) for k_ in range(3))]
+        sel = (lo_ != hi_) & (lo_ != 0) & (hi_ != 0)
+        for u, w_ in set(zip(lo_[sel].tolist(), hi_[sel].tolist())):
+            nb.setdefault(u, set()).add(w_); nb.setdefault(w_, set()).add(u)
+    hues = {}
+    order = sorted(np.unique(vol[vol != 0]).tolist(), key=lambda q: -len(nb.get(q, ())))
+    cand = (np.arange(nhue) * 5 % nhue) / nhue                                     # interleaved so early picks are far apart
+    for q in order:
+        used = [hues[n] for n in nb.get(q, ()) if n in hues]
+        dist = lambda h: min([min(abs(h - u), 1 - abs(h - u)) for u in used], default=1.0)
+        hues[q] = max(cand, key=lambda h: (round(dist(h), 6), -h))
+    return hues
+
+
+HUES = _assign_hues(vc)
+
+
+def colour(q):
+    return np.array(colorsys.hsv_to_rgb(HUES.get(int(q), 0.0), 0.85, 0.95))
 
 
 # A: slice
@@ -129,7 +152,7 @@ for pane in (ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane):
     pane.set_alpha(0.0)
 # C: gap + tracers
 ax = fig.add_subplot(1, 3, 3, projection="3d"); draw_surface(ax, "#6f8aa3", 0.05)
-cols = ["#f7c9a8", "#ec8a4a", "#a8420f"]
+cols = [plt.cm.turbo(x)[:3] for x in (0.1, 0.5, 0.9)]            # full spectrum: early blue, middle green, late red
 for kk, cc in zip([3, 8, nrec], cols):
     p = r["pos"][kk]; ok = np.all((p >= off) & (p <= off + (hi - lo) * H), axis=1)
     ax.scatter(p[ok, 2] / 1e3, p[ok, 1] / 1e3, p[ok, 0] / 1e3, s=4, c=cc, alpha=0.85, linewidths=0, label=f"{ms(r['t'][kk]):.2g} ms")
