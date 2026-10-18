@@ -70,9 +70,9 @@ def draw(ax, meshes, view, title, bar=True):
 
 axes = [fig.add_subplot(gs[1, :2], projection="3d"), fig.add_subplot(gs[1, 2:4], projection="3d"),
         fig.add_subplot(gs[1, 4:], projection="3d")]
-draw(axes[0], st, (22, -62), "stair-step (each frame repeated 5x): view 1")
-draw(axes[1], st, (50, -118), "stair-step: view 2")
-draw(axes[2], sm, (22, -62), "sdf_align conforming mesh: view 1")
+draw(axes[0], st, (22, 118), "stair-step (each frame repeated 5x): view 1")
+draw(axes[1], st, (50, 62), "stair-step: view 2")
+draw(axes[2], sm, (22, 118), "sdf_align conforming mesh: view 1")
 fig.suptitle("Thin ledge and spikes on cell …779 (orange) over cell …338 (blue), frames 17413-17418 (tile 170398_61241)",
              fontsize=13, fontweight="bold", x=0.01, ha="left", y=0.965)
 fig.text(0.01, 0.01, "Red outlines: pixels in features narrower than 3 pixels (24 nm). Raw frames from the supplied tile data; "
