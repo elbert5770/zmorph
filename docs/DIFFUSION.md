@@ -140,16 +140,33 @@ w = 20 nm +-30% (period 1e5), burst released at 3 phases. No other sink, so the 
 | 200 | 0.63-0.65 | 0.55-0.57 | 0.018 / 0.023 |
 | 300 | 0.74 | 0.67-0.70 | 0.008 / 0.024 |
 
-* **w does not matter here either.** Across a 3-fold change in w the captured fraction varies by at most 3.6 points, with no monotonic trend, and
-  breathing falls inside the static range (phase-to-phase range 0.6-5.4 points). I did not measure seed scatter separately (two seeds were averaged),
-  so effects below about 3 points are not resolved.
+* **w has a small effect, resolved only with many tracers.** The 800-tracer CPU runs above could not resolve it (they put effects below about
+  3 points in the noise). A GPU sweep with 20000 x 2 seeds per condition (binomial error about 0.24 points per value, no per-seed scatter
+  measured) gives, for static w = 12 / 20 / 30 / 40 nm:
+
+  | site, R | w = 12 | 20 | 30 | 40 | 12 to 40 |
+  |---|---|---|---|---|---|
+  | 0, 100 | 0.344 | 0.342 | 0.333 | 0.333 | -0.011 |
+  | 0, 200 | 0.639 | 0.641 | 0.630 | 0.627 | -0.012 |
+  | 0, 300 | 0.748 | 0.745 | 0.737 | 0.732 | -0.016 |
+  | 1, 100 | 0.343 | 0.342 | 0.337 | 0.332 | -0.011 |
+  | 1, 200 | 0.576 | 0.575 | 0.566 | 0.561 | -0.015 |
+  | 1, 300 | 0.701 | 0.696 | 0.684 | 0.678 | -0.023 |
+
+  All six sites and radii fall with w, by 1-2 points (up to 2.3) from 12 to 40 nm, flat between 12 and 20 nm; each step is 3-7 standard errors of the
+  difference. This is small (3-7% relative) against the effect of patch size and site. The cause is not identified. One candidate that is an
+  artifact of the setup: the patch is the cell inside a ball of fixed radius, and the wall lies w/2 inside the cell, so a wider gap leaves a slightly
+  smaller absorbing disc (about 2-4% in area at R = 100 nm, w = 40 nm). A patch defined at fixed wall area would separate this from physics.
+* **Breathing (GPU, 20000 x 2).** +-30% about 20 nm: 0.341 vs 0.342 static at R = 100 nm, 0.640 vs 0.641 at R = 200 nm (site 0), so no effect within about a point.
+* **The GPU kernel agrees with the CPU code.** Site 0, R = 100 nm, w = 20 nm, 20000 x 2 seeds on the CPU gives 0.343 against 0.342 on the GPU (the earlier
+  800-tracer CPU value 0.319 was about 2 standard errors low). A whole-cell sink check (100000 tracers) gave 0.2154 CPU vs 0.2180 GPU.
+  A40 throughput: 18x the CPU at 10^5 tracers on the tile crop, 50x on a slab; no gain below about 10^4 tracers.
 * **The patch size and the site do matter.** Capture rises steeply from R = 100 to 200 nm and saturates towards 300 nm; at R = 200 nm the two
   sites differ by about 10 points. The local sheet network (how many routes lead to the patch) matters more than the gap width.
 * Half of the final capture is reached at 1.3-2.8e5, earlier for larger patches. A release spread uniformly over 2e5 lowers capture by tmax by
   1-2 points (the table in the .md).
 * Not done: a comparison with an analytic rate (the sheet network is not a plane, so no closed form applies), partial absorption (p < 1) on
-  small patches, and more sites. The large sink earlier and these small ones agree that, in a thin-sheet network, geometry of connectivity
-  and target size set the clearance and the gap width does not.
+  small patches, and more sites. In a thin-sheet network, target size and connectivity set the clearance; the gap width changes it by only a few percent.
 
 ## Next
 
