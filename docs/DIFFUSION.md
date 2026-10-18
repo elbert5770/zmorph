@@ -157,8 +157,23 @@ w = 20 nm +-30% (period 1e5), burst released at 3 phases. No other sink, so the 
 
   All six sites and radii fall with w, by 1-2 points (up to 2.3) from 12 to 40 nm, flat between 12 and 20 nm; each step is 3-7 standard errors of the
   difference. This is small (3-7% relative) against the effect of patch size and site. The cause is not identified. A possible artifact of the setup:
-  the wall lies w/2 inside the cell, so a wider gap meets the fixed ball at a smaller area. `--patch disc` (`sinks.disc_patch_map`) defines the patch as
-  a disc of radius R in the interface plane, independent of w, to separate this from physics (run pending).
+  the wall lies w/2 inside the cell, so a wider gap meets the fixed ball at a smaller area. To test it, `--patch disc` (`sinks.disc_patch_map`) defines the
+  patch as a disc of radius R in the interface plane, independent of w. The hypothesis is not supported: the dependence on w got larger, not smaller.
+  Disc patch, same sweep (20000 x 2 seeds), captured fraction at w = 12 / 20 / 30 / 40 nm:
+
+  | site, R | w = 12 | 20 | 30 | 40 | 12 to 40 |
+  |---|---|---|---|---|---|
+  | 0, 100 | 0.346 | 0.346 | 0.340 | 0.338 | -0.008 |
+  | 0, 200 | 0.548 | 0.529 | 0.506 | 0.479 | -0.069 |
+  | 0, 300 | 0.633 | 0.613 | 0.590 | 0.560 | -0.073 |
+  | 1, 100 | 0.324 | 0.317 | 0.307 | 0.296 | -0.028 |
+  | 1, 200 | 0.449 | 0.443 | 0.435 | 0.424 | -0.025 |
+  | 1, 300 | 0.485 | 0.478 | 0.466 | 0.456 | -0.029 |
+
+  Capture falls monotonically with w in all six cases, by 0.8 to 7.3 points (up to 13% relative, at site 0, R >= 200 nm); only site 0, R = 100 nm is near the
+  noise (about 2 standard errors of the difference). The patch definition matters far more than the gap: at R = 300 nm the disc captures 0.49-0.63 against
+  0.68-0.75 for the ball. The cause of the w dependence is not identified. The ECS volume within 1 um of the source grows 1.8x, 2.5x and 3.0x from 12 to 20, 30
+  and 40 nm (at 8 nm voxels, so partly quantisation), yet capture falls by only 4-13%, so simple dilution into the extra volume is too strong an explanation.
 * **Breathing (GPU, 20000 x 2).** +-30% about 20 nm: 0.341 vs 0.342 static at R = 100 nm, 0.640 vs 0.641 at R = 200 nm (site 0), so no effect within about a point.
 * **The GPU kernel agrees with the CPU code.** Site 0, R = 100 nm, w = 20 nm, 20000 x 2 seeds on the CPU gives 0.343 against 0.342 on the GPU (the earlier
   800-tracer CPU value 0.319 was about 2 standard errors low). A whole-cell sink check (100000 tracers) gave 0.2154 CPU vs 0.2180 GPU.
@@ -168,7 +183,7 @@ w = 20 nm +-30% (period 1e5), burst released at 3 phases. No other sink, so the 
 * Half of the final capture is reached at 1.3-2.8e5, earlier for larger patches. A release spread uniformly over 2e5 lowers capture by tmax by
   1-2 points (the table in the .md).
 * Not done: a comparison with an analytic rate (the sheet network is not a plane, so no closed form applies), partial absorption (p < 1) on
-  small patches, and more sites. In a thin-sheet network, target size and connectivity set the clearance; the gap width changes it by only a few percent.
+  small patches, and more sites. In a thin-sheet network, target size, patch definition and connectivity set the clearance; widening the gap from 12 to 40 nm lowers it by a few percent to 13%.
 
 ## Next
 
