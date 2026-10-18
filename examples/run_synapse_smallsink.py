@@ -16,7 +16,7 @@ sys.path.insert(0, ROOT)
 import numpy as np
 from zmorph.synapse import release_positions
 from zmorph.bd import simulate_dynamic
-from zmorph.sinks import first_passage
+from zmorph.sinks import first_passage, disc_patch_map
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--tile", default="170398_60741")
@@ -28,6 +28,8 @@ ap.add_argument("--period", type=float, default=1e5); ap.add_argument("--phases"
 ap.add_argument("--n", type=int, default=1500); ap.add_argument("--tmax", type=float, default=2e6)
 ap.add_argument("--tau", type=float, default=2e5, help="duration of the uniform release profile")
 ap.add_argument("--seeds", type=int, default=2); ap.add_argument("--tag", default="")
+ap.add_argument("--patch", choices=["ball", "disc"], default="ball",
+                help="ball: the cell within R of the site (the patch shrinks as w grows); disc: radius R in the interface plane (fixed area)")
 ap.add_argument("--gpu", action="store_true", help="use the numba.cuda kernel (zmorph.bd_gpu, float32) instead of the CPU code")
 ap.add_argument("--modes", nargs="+", default=["static", "breathing"], choices=["static", "breathing"])
 a = ap.parse_args()
@@ -57,7 +59,10 @@ grid = np.indices(m.shape).reshape(3, -1).T * H
 
 
 def patch_map(site, R):
-    """1 on the cell under `site` within R nm of it (the membrane there absorbs)."""
+    """1 on the cell under `site` within R nm of it (the membrane there absorbs); --patch disc: a fixed-area disc instead."""
+    if a.patch == "disc":
+        patch, lab, _, _ = disc_patch_map(vol, m, H, site, R, depth=max(40.0, 0.5 * max(a.ws) + 16))
+        return patch, lab
     lab = vol[tuple(np.round(site / H).astype(int))]
     near = np.linalg.norm(grid - site, axis=1) <= R
     return ((vol.ravel() == lab) & near).reshape(m.shape).astype(np.int32), int(lab)

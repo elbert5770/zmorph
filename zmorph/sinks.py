@@ -9,6 +9,7 @@ only the sink cell's side of the gap absorbs; the opposite wall reflects.
   absorption_probability(kappa, dt)  per-hit probability p = kappa sqrt(pi dt / D) for a reaction-rate constant kappa
   pick_sink(vol, h, source, ...)     a sink cell far from the source, with large surface in contact with other cells
   first_passage(res)                 absorbed fraction versus time and the first-passage-time summary of a run
+  disc_patch_map(vol, m, h, site, R) a disc of the membrane (radius R in the interface plane) on the cell under `site`
 
 Units: nm, D = 1, time nm^2/D.
 """
@@ -62,3 +63,32 @@ def first_passage(res, n_grid=60):
                 t_median=float(np.median(at)) if got.any() else None,
                 t_mean=float(at.mean()) if got.any() else None,
                 t_q10=float(np.quantile(at, 0.1)) if got.any() else None)
+
+
+def disc_patch_map(vol, m, h, site, radius, depth=40.0, smooth=1.5):
+    """Patch map (int32, 1 on the patch) for a disc of radius `radius` nm in the interface plane under `site` (nm, a point of the gap).
+
+    Unlike a ball around the site, the disc does not shrink as the gap widens: the wall lies w/2 inside the cell, and
+    a ball of fixed radius cuts a smaller disc there. The patch is the voxels of the cell at the site whose lateral
+    distance (in the interface plane) from the site's projection onto the interface is at most `radius` and whose
+    distance from the interface plane is at most `depth` (must exceed w/2 of the widest gap used). The interface plane
+    and its normal come from the smoothed gradient of the margin m (m = 2 x distance to the interface).
+    Returns (patch, label, normal, centre) with centre the projection of `site` onto the interface (nm)."""
+    from scipy.ndimage import gaussian_filter
+    site = np.asarray(site, float)
+    idx = np.round(site / h).astype(int)
+    r = int(np.ceil((radius + depth) / h)) + 1
+    lo = np.maximum(idx - r, 0); hi = np.minimum(idx + r + 1, m.shape)
+    sl = tuple(slice(a, b) for a, b in zip(lo, hi))
+    mloc = gaussian_filter(np.asarray(m[sl], float), smooth)
+    g = np.array([np.gradient(mloc, h, axis=k)[tuple(idx - lo)] for k in range(3)])
+    n = g / np.linalg.norm(g)
+    msite = float(np.asarray(m[tuple(idx)], float))
+    centre = site - 0.5 * msite * n                                   # m = 2 d: d = m / 2 along the gradient
+    lab = vol[tuple(idx)]
+    coords = np.stack(np.meshgrid(*[np.arange(a, b) for a, b in zip(lo, hi)], indexing="ij"), -1) * h - centre
+    along = coords @ n
+    lateral = np.linalg.norm(coords - along[..., None] * n, axis=-1)
+    patch = np.zeros(m.shape, np.int32)
+    patch[sl] = ((vol[sl] == lab) & (lateral <= radius) & (np.abs(along) <= depth)).astype(np.int32)
+    return patch, int(lab), n, centre

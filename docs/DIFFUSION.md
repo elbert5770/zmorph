@@ -130,7 +130,9 @@ An earlier extrapolation of the sub-box correction to the full crop overshot (pr
 ## Small patch sinks (disc-shaped absorbers)
 
 Script `examples/run_synapse_smallsink.py`; results `results/synapse_source/smallsink_170398_60741.{json,md}`. Same crop. Two sites in the gap
-about 500 nm from the top cleft; the sink is the part of the cell under the site within R of it (R = 100, 200, 300 nm), p = 1 per wall hit.
+about 500 nm from the top cleft; the sink is every part of the membrane of the cell under the site within 3-D distance R of it (R = 100, 200, 300 nm), p = 1 per wall hit.
+This "ball" patch is not a disc: where the cell curves or touches other cells inside the ball, those membranes absorb too (at site 0 the ball covers
+4351, 26058 and 55337 voxels of the cell at R = 100, 200, 300 nm against 2243, 5832 and 8971 for a disc of that radius in the interface plane).
 800 tracers x 2 seeds per condition, tmax 1e6 (about 6.7 ms for D = 1.5e-10 m^2/s, an assumed value). Static w = 12, 20, 30, 40 nm; breathing
 w = 20 nm +-30% (period 1e5), burst released at 3 phases. No other sink, so the uncaptured fraction is still wandering at tmax.
 
@@ -154,9 +156,9 @@ w = 20 nm +-30% (period 1e5), burst released at 3 phases. No other sink, so the 
   | 1, 300 | 0.701 | 0.696 | 0.684 | 0.678 | -0.023 |
 
   All six sites and radii fall with w, by 1-2 points (up to 2.3) from 12 to 40 nm, flat between 12 and 20 nm; each step is 3-7 standard errors of the
-  difference. This is small (3-7% relative) against the effect of patch size and site. The cause is not identified. One candidate that is an
-  artifact of the setup: the patch is the cell inside a ball of fixed radius, and the wall lies w/2 inside the cell, so a wider gap leaves a slightly
-  smaller absorbing disc (about 2-4% in area at R = 100 nm, w = 40 nm). A patch defined at fixed wall area would separate this from physics.
+  difference. This is small (3-7% relative) against the effect of patch size and site. The cause is not identified. A possible artifact of the setup:
+  the wall lies w/2 inside the cell, so a wider gap meets the fixed ball at a smaller area. `--patch disc` (`sinks.disc_patch_map`) defines the patch as
+  a disc of radius R in the interface plane, independent of w, to separate this from physics (run pending).
 * **Breathing (GPU, 20000 x 2).** +-30% about 20 nm: 0.341 vs 0.342 static at R = 100 nm, 0.640 vs 0.641 at R = 200 nm (site 0), so no effect within about a point.
 * **The GPU kernel agrees with the CPU code.** Site 0, R = 100 nm, w = 20 nm, 20000 x 2 seeds on the CPU gives 0.343 against 0.342 on the GPU (the earlier
   800-tracer CPU value 0.319 was about 2 standard errors low). A whole-cell sink check (100000 tracers) gave 0.2154 CPU vs 0.2180 GPU.

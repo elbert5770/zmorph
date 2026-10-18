@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("numba")
 from zmorph.bd import simulate_dynamic, sample_ecs
-from zmorph.sinks import sink_patch_map, absorption_probability, first_passage
+from zmorph.sinks import disc_patch_map, sink_patch_map, absorption_probability, first_passage
 
 H = 8.0
 
@@ -37,3 +37,19 @@ def test_first_passage_summary_and_probability():
     assert absorption_probability(0.05, 0.5) == pytest.approx(0.05 * np.sqrt(np.pi * 0.5))
     with pytest.raises(ValueError):
         absorption_probability(2.0, 0.5)
+
+
+def test_disc_patch_has_fixed_area_in_the_interface_plane():
+    n, nz = 40, 21
+    vol = np.ones((n, n, nz), np.int64); vol[:, :, nz // 2:] = 2
+    z = (np.arange(nz) - (nz // 2 - 0.5)) * H
+    m = np.broadcast_to((2 * np.abs(z))[None, None, :], vol.shape).copy()
+    site = np.array([20 * H, 20 * H, (nz // 2) * H])                          # in the gap, on the label-2 side
+    R = 100.0
+    patch, lab, normal, centre = disc_patch_map(vol, m, H, site, R, depth=40.0)
+    assert lab == 2 and abs(abs(normal[2]) - 1) < 1e-6 and abs(centre[2] - (nz // 2 - 0.5) * H) < 1e-6
+    layer = patch[:, :, nz // 2 + 1].sum() * H * H                           # one layer 1.5 voxels from the interface
+    assert layer == pytest.approx(np.pi * R * R, rel=0.1)
+    assert patch[:, :, : nz // 2].sum() == 0                                   # nothing on the other cell
+    ball = (np.linalg.norm(np.indices(vol.shape).transpose(1, 2, 3, 0) * H - site, axis=-1) <= R) & (vol == 2)
+    assert ball[:, :, nz // 2 + 4].sum() < patch[:, :, nz // 2 + 4].sum()    # the ball is smaller on a deeper layer
