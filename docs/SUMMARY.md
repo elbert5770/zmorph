@@ -83,6 +83,7 @@ factors change release and clearance. The method for the geometry is `sdf_align`
 | Topic | Location |
 |---|---|
 | Method write-up, benchmarks, sink and tile results | `docs/DIFFUSION.md` |
+| Novelty, merit, risks and what would make it publishable | `docs/NOVELTY.md` |
 | Interpolation, regularisation, ParaView export | `README.md` |
 | BD, GPU port, sinks, synapses | `zmorph/bd.py`, `bd_gpu.py`, `sinks.py`, `synapse.py` |
 | Scripts to rerun the studies | `examples/run_*.py`, `examples/bench_bd_gpu.py` |
